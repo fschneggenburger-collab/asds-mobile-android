@@ -1,5 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="ic_launcher_background">#1A1A1A</color>
-    <color name="gold">#C9A227</color>
+    <color name="ic_launcher_background">#102C50</color>
+    <color name="gold">#C8A13A</color>
+    <color name="asds_navy">#102C50</color>
+    <color name="asds_navy_deep">#0A213D</color>
+    <color name="asds_blue">#1F5F96</color>
+    <color name="asds_gold">#C8A13A</color>
+    <color name="asds_gold_dark">#A8841A</color>
+    <color name="asds_gold_soft">#22C8A13A</color>
+    <color name="asds_gold_surface">#FFF7E3</color>
+    <color name="asds_background">#F3F6FA</color>
+    <color name="asds_surface">#FFFFFF</color>
+    <color name="asds_text">#17253A</color>
+    <color name="asds_muted">#6B7785</color>
+    <color name="asds_border">#DDE5ED</color>
+    <color name="asds_header_subtitle">#D8E4F0</color>
+    <color name="asds_nav_inactive">#718096</color>
 </resources>
