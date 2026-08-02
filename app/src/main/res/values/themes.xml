@@ -14,11 +14,4 @@
         <item name="android:windowBackground">@color/asds_background</item>
         <item name="android:windowActionModeOverlay">true</item>
     </style>
-
-    <style name="Widget.ASDS.BottomNavigation.ActiveIndicator" parent="Widget.Material3.BottomNavigationView.ActiveIndicator">
-        <item name="android:color">@color/asds_gold_surface</item>
-        <item name="shapeAppearance">@style/ShapeAppearance.ASDS.Pill</item>
-    </style>
-
-    <style name="ShapeAppearance.ASDS.Pill" parent="ShapeAppearance.Material3.Corner.Full" />
 </resources>
