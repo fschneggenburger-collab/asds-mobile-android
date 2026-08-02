@@ -32,6 +32,7 @@
     <string name="quick_task">Aufgabe erstellen</string>
     <string name="quick_customer">Kundenakte öffnen</string>
     <string name="quick_security">Sicherheit &amp; Offline</string>
+    <string name="quick_leadership">Leitung &amp; Administration</string>
     <string name="download_started">Download wurde gestartet.</string>
     <string name="download_failed">Datei konnte nicht heruntergeladen werden.</string>
     <string name="external_app_missing">Keine passende App gefunden.</string>
@@ -45,4 +46,11 @@
     <string name="security_sync_now">Jetzt synchronisieren</string>
     <string name="security_open_center">Sicherheitscenter öffnen</string>
     <string name="security_sync_started">Synchronisation wurde gestartet.</string>
+    <string name="leadership_title">Leitung &amp; Administration</string>
+    <string name="leadership_cockpit">Leitungs-Cockpit</string>
+    <string name="leadership_staff">Mitarbeitendenübersicht</string>
+    <string name="leadership_approvals">Freigaben</string>
+    <string name="leadership_protocols">Offene Protokolle</string>
+    <string name="leadership_calendar">Teamtermine</string>
+    <string name="leadership_month">Monatskontrolle</string>
 </resources>
