@@ -49,6 +49,7 @@ jobs:
           python3 tools/prepare_mobile.py 1.7.0
           python3 tools/fix_v171.py
           python3 tools/fix_v171_versioncode.py
+          python3 tools/fix_v171_migration.py
 
       - name: Funktionsquellen vor dem Build prüfen
         shell: bash
@@ -60,6 +61,7 @@ jobs:
           grep -q 'showNativeSecurityMenu' app/src/main/java/ch/asds/mobile/MainActivity.kt
           grep -q 'MODE_NIGHT_NO' app/src/main/java/ch/asds/mobile/MainActivity.kt
           grep -q 'ALGORITHMIC_DARKENING' app/src/main/java/ch/asds/mobile/MainActivity.kt
+          grep -q 'ensureV171SecurityDefaults' app/src/main/java/ch/asds/mobile/MainActivity.kt
           grep -q 'getBoolean("biometric_enabled", true)' app/src/main/java/ch/asds/mobile/AppSettings.kt
           grep -q 'BiometricPrompt' app/src/main/java/ch/asds/mobile/SecurityController.kt
           grep -q 'PeriodicWorkRequestBuilder' app/src/main/java/ch/asds/mobile/WorkerScheduler.kt
@@ -67,7 +69,7 @@ jobs:
           {
             echo 'ASDS Mobile 1.7.1 source verification: OK'
             echo 'Version code: 81'
-            echo 'Biometric app lock: present and enabled by default'
+            echo 'Biometric app lock: present and force-enabled once for the corrected update'
             echo 'Native security menu: present'
             echo 'Encrypted drafts and sync queue: present'
             echo 'WorkManager notifications: present'
