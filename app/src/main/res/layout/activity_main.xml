@@ -141,11 +141,11 @@
                 android:layout_marginTop="20dp"
                 android:text="@string/retry"
                 android:textAllCaps="false"
+                android:textColor="@color/asds_navy"
                 app:backgroundTint="@color/asds_gold"
                 app:cornerRadius="14dp"
                 app:icon="@drawable/ic_refresh"
-                app:iconTint="@color/asds_navy"
-                app:textColor="@color/asds_navy" />
+                app:iconTint="@color/asds_navy" />
         </LinearLayout>
     </FrameLayout>
 
@@ -154,7 +154,6 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:background="@android:color/white"
-        app:itemActiveIndicatorStyle="@style/Widget.ASDS.BottomNavigation.ActiveIndicator"
         app:itemIconTint="@color/bottom_navigation_colors"
         app:itemRippleColor="@color/asds_gold_soft"
         app:itemTextColor="@color/bottom_navigation_colors"
