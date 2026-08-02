@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">ASDS Mobile</string>
+    <string name="portal_url">https://portal.ihre-wegbegleiterin.ch/custom/asds_mobile/mobile/index.php?stage=10</string>
+    <string name="choose_source_title">Datei auswählen</string>
+    <string name="option_photo">Foto aus Google Fotos</string>
+    <string name="option_camera">Neues Foto aufnehmen</string>
+    <string name="option_pdf">PDF auswählen</string>
+    <string name="cancel">Abbrechen</string>
+    <string name="error_no_camera">Kamera-App nicht verfügbar.</string>
+    <string name="error_no_picker">Foto-Auswahl nicht verfügbar.</string>
+    <string name="error_no_pdf">PDF-Auswahl nicht verfügbar.</string>
+    <string name="error_generic">Auswahl fehlgeschlagen: %1$s</string>
+    <string name="error_create_file">Temporäre Kameradatei konnte nicht erstellt werden.</string>
+</resources>
