@@ -11,8 +11,8 @@ android {
         applicationId = "ch.asds.mobile"
         minSdk = 31
         targetSdk = 35
-        versionCode = 81
-        versionName = "1.7.1"
+        versionCode = 90
+        versionName = "1.8.0"
     }
 
     buildTypes {
