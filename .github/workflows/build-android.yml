@@ -8,12 +8,12 @@ on:
       - '.github/BUILD_TRIGGER'
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
 
     steps:
       - name: Quellcode auschecken
@@ -39,48 +39,52 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Android-Quellcode für 1.6.0 vorbereiten
-        shell: bash
-        run: python3 tools/prepare_v160.py
-
-      - name: Vorbereiteten Quellcode sichern
-        shell: bash
-        run: |
-          if ! git diff --quiet -- app/src/main/java/ch/asds/mobile/MainActivity.kt; then
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add app/src/main/java/ch/asds/mobile/MainActivity.kt
-            git commit -m "Apply ASDS Mobile 1.6.0 native shell [skip ci]"
-            git push
-          fi
-
       - name: Arbeitsordner vorbereiten
         shell: bash
         run: mkdir -p build-artifact
 
-      - name: Release-APK kompilieren
-        id: gradle_build
+      - name: Android 1.7.0 vorbereiten
+        shell: bash
+        run: python3 tools/prepare_mobile.py 1.7.0
+
+      - name: Android 1.7.0 kompilieren
         shell: bash
         run: |
           set +e
-          gradle --no-daemon --stacktrace :app:assembleRelease 2>&1 | tee build-artifact/gradle-build.log
+          gradle --no-daemon --stacktrace :app:clean :app:assembleRelease 2>&1 | tee build-artifact/gradle-build-1.7.0.log
           status=${PIPESTATUS[0]}
-          echo "status=$status" >> "$GITHUB_OUTPUT"
-          exit $status
+          if [ "$status" -eq 0 ]; then
+            cp app/build/outputs/apk/release/app-release-unsigned.apk build-artifact/ASDS_Mobile_Android_1.7.0_unsigned.apk
+          fi
+          exit "$status"
 
-      - name: Release-Paket vorbereiten
-        if: success()
+      - name: Android 1.8.0 vorbereiten
+        shell: bash
+        run: python3 tools/prepare_mobile.py 1.8.0
+
+      - name: Android 1.8.0 kompilieren
         shell: bash
         run: |
-          cp app/build/outputs/apk/release/app-release-unsigned.apk build-artifact/ASDS_Mobile_Android_1.6.0_unsigned.apk
+          set +e
+          gradle --no-daemon --stacktrace :app:clean :app:assembleRelease 2>&1 | tee build-artifact/gradle-build-1.8.0.log
+          status=${PIPESTATUS[0]}
+          if [ "$status" -eq 0 ]; then
+            cp app/build/outputs/apk/release/app-release-unsigned.apk build-artifact/ASDS_Mobile_Android_1.8.0_unsigned.apk
+          fi
+          exit "$status"
+
+      - name: Signaturwerkzeug und Hinweise bereitstellen
+        if: always()
+        shell: bash
+        run: |
           cp "$ANDROID_SDK_ROOT/build-tools/35.0.0/lib/apksigner.jar" build-artifact/apksigner.jar
-          printf 'ASDS Mobile Android 1.6.0\nUnsigned Release APK plus official Android apksigner tool.\n' > build-artifact/README.txt
+          printf 'ASDS Mobile Android 1.7.0 und 1.8.0\nUnsigned Release APKs plus official Android apksigner tool.\n' > build-artifact/README.txt
 
       - name: Build-Ergebnis bereitstellen
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ASDS-Mobile-Android-1.6.0-Build-Ergebnis
+          name: ASDS-Mobile-Android-1.7.0-und-1.8.0-Build-Ergebnis
           path: build-artifact/
           if-no-files-found: error
           retention-days: 7
