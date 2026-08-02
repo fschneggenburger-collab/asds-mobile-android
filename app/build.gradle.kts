@@ -11,7 +11,7 @@ android {
         applicationId = "ch.asds.mobile"
         minSdk = 31
         targetSdk = 35
-        versionCode = 71
+        versionCode = 81
         versionName = "1.7.1"
     }
 
