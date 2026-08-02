@@ -2,8 +2,6 @@ name: ASDS Mobile Android Build
 
 on:
   workflow_dispatch:
-  push:
-    branches: [ main, master ]
 
 permissions:
   contents: read
@@ -37,21 +35,33 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Release-APK kompilieren
-        run: gradle --no-daemon --stacktrace :app:assembleRelease
+      - name: Arbeitsordner vorbereiten
+        shell: bash
+        run: mkdir -p build-artifact
 
-      - name: Release-Paket vorbereiten
+      - name: Release-APK kompilieren
+        id: gradle_build
         shell: bash
         run: |
-          mkdir -p build-artifact
+          set +e
+          gradle --no-daemon --stacktrace :app:assembleRelease 2>&1 | tee build-artifact/gradle-build.log
+          status=${PIPESTATUS[0]}
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          exit $status
+
+      - name: Release-Paket vorbereiten
+        if: success()
+        shell: bash
+        run: |
           cp app/build/outputs/apk/release/app-release-unsigned.apk build-artifact/ASDS_Mobile_Android_1.3.0_unsigned.apk
           cp "$ANDROID_SDK_ROOT/build-tools/35.0.0/lib/apksigner.jar" build-artifact/apksigner.jar
           printf 'ASDS Mobile Android 1.3.0\nUnsigned Release APK plus official Android apksigner tool.\n' > build-artifact/README.txt
 
-      - name: Release-Paket bereitstellen
+      - name: Build-Ergebnis bereitstellen
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ASDS-Mobile-Android-1.3.0-Release-Paket
+          name: ASDS-Mobile-Android-1.3.0-Build-Ergebnis
           path: build-artifact/
           if-no-files-found: error
           retention-days: 7
