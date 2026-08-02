@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.ASDSMobile" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+    <style name="Theme.ASDSMobile" parent="Theme.MaterialComponents.Light.NoActionBar">
         <item name="colorPrimary">@color/asds_gold</item>
         <item name="colorPrimaryVariant">@color/asds_gold_dark</item>
         <item name="colorOnPrimary">@color/asds_navy</item>
@@ -13,5 +13,6 @@
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowBackground">@color/asds_background</item>
         <item name="android:windowActionModeOverlay">true</item>
+        <item name="android:forceDarkAllowed">false</item>
     </style>
 </resources>
