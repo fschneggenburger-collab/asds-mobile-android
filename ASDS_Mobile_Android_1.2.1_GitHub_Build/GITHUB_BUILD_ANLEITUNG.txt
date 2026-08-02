@@ -1,0 +1,17 @@
+ASDS Mobile Android 1.2.1 – Build über GitHub Actions
+
+1. Auf GitHub ein leeres Repository erstellen, z. B. "asds-mobile-android".
+2. Den Inhalt dieses ZIPs in das Repository hochladen. Die Dateien müssen direkt im
+   Repository liegen; build.gradle.kts darf nicht in einem zusätzlichen Unterordner liegen.
+3. Den Upload/Commit abschliessen. Der Workflow "ASDS Mobile Android Build" startet
+   automatisch bei einem Push auf main oder master.
+4. Auf GitHub "Actions" öffnen und den abgeschlossenen Lauf auswählen.
+5. Unter "Artifacts" das Paket "ASDS-Mobile-Android-1.2.1-unsigned" herunterladen.
+6. Das heruntergeladene ZIP bzw. die enthaltene app-release-unsigned.apk hier im Chat
+   hochladen. Die APK wird danach mit dem bisherigen ASDS-Mobile-Zertifikat signiert,
+   damit sie über die vorhandene App installiert werden kann.
+
+WICHTIG:
+- Die vorhandene App auf dem Pixel nicht deinstallieren.
+- Keine privaten Signaturschlüssel in GitHub hochladen.
+- Der Workflow erzeugt absichtlich eine UNSIGNIERTE Release-APK.
