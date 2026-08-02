@@ -2,6 +2,12 @@
 <resources>
     <string name="app_name">ASDS Mobile</string>
     <string name="portal_url">https://portal.ihre-wegbegleiterin.ch/custom/asds_mobile/mobile/index.php?stage=10</string>
+    <string name="header_default_subtitle">Sichere mobile Arbeitsplattform</string>
+    <string name="more">Mehr</string>
+    <string name="nav_home">Übersicht</string>
+    <string name="nav_trips">Fahrten</string>
+    <string name="nav_time">Arbeitszeit</string>
+    <string name="nav_more">Mehr</string>
     <string name="choose_source_title">Datei auswählen</string>
     <string name="option_photo">Foto aus Google Fotos</string>
     <string name="option_camera">Neues Foto aufnehmen</string>
@@ -12,4 +18,14 @@
     <string name="error_no_pdf">PDF-Auswahl nicht verfügbar.</string>
     <string name="error_generic">Auswahl fehlgeschlagen: %1$s</string>
     <string name="error_create_file">Temporäre Kameradatei konnte nicht erstellt werden.</string>
+    <string name="load_error_title">Verbindung nicht möglich</string>
+    <string name="load_error_message">Die ASDS-Plattform konnte nicht geladen werden. Prüfe die Internetverbindung und versuche es erneut.</string>
+    <string name="retry">Erneut versuchen</string>
+    <string name="menu_title">ASDS Mobile</string>
+    <string name="menu_expenses">Spesen &amp; Ausgaben</string>
+    <string name="menu_manual_trip">Fahrt manuell erfassen</string>
+    <string name="menu_appointments">Termine</string>
+    <string name="menu_protocols">Protokolle</string>
+    <string name="menu_logout">Abmelden</string>
+    <string name="coming_soon">Dieser Bereich wird in einer kommenden Version ergänzt.</string>
 </resources>
