@@ -11,11 +11,13 @@
     <string name="nav_more">Mehr</string>
     <string name="choose_source_title">Datei auswählen</string>
     <string name="option_photo">Foto aus Google Fotos</string>
+    <string name="option_files">Fotos, Dateien oder PDF auswählen</string>
+    <string name="option_multiple_files">Mehrere Fotos oder Dateien auswählen</string>
     <string name="option_camera">Neues Foto aufnehmen</string>
     <string name="option_pdf">PDF auswählen</string>
     <string name="cancel">Abbrechen</string>
     <string name="error_no_camera">Kamera-App nicht verfügbar.</string>
-    <string name="error_no_picker">Foto-Auswahl nicht verfügbar.</string>
+    <string name="error_no_picker">Datei- oder Fotoauswahl nicht verfügbar.</string>
     <string name="error_no_pdf">PDF-Auswahl nicht verfügbar.</string>
     <string name="error_generic">Auswahl fehlgeschlagen: %1$s</string>
     <string name="load_error_title">Verbindung nicht möglich</string>
@@ -27,4 +29,7 @@
     <string name="quick_protocol">Protokoll erfassen</string>
     <string name="quick_expense">Spese oder Ausgabe</string>
     <string name="quick_trip">Fahrt manuell erfassen</string>
+    <string name="download_started">Download wurde gestartet.</string>
+    <string name="download_failed">Datei konnte nicht heruntergeladen werden.</string>
+    <string name="external_app_missing">Keine passende App gefunden.</string>
 </resources>
