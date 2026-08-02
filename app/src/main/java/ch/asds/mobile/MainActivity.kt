@@ -1,14 +1,18 @@
 package ch.asds.mobile
 
 import android.annotation.SuppressLint
+import android.app.DownloadManager
 import android.content.ActivityNotFoundException
+import android.content.Context
 import android.content.Intent
 import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
+import android.os.Environment
 import android.util.Log
 import android.view.View
 import android.webkit.CookieManager
+import android.webkit.URLUtil
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
@@ -68,6 +72,22 @@ class MainActivity : AppCompatActivity() {
             deliver(if (uri != null) arrayOf(uri) else null)
         }
 
+    private val documentLauncher =
+        registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            if (uri != null) {
+                rememberReadPermission(uri)
+                deliver(arrayOf(uri))
+            } else {
+                deliver(null)
+            }
+        }
+
+    private val multipleDocumentLauncher =
+        registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+            uris.forEach(::rememberReadPermission)
+            deliver(uris.takeIf { it.isNotEmpty() }?.toTypedArray())
+        }
+
     private val cameraLauncher =
         registerForActivityResult(ActivityResultContracts.TakePicture()) { success ->
             val uri = cameraOutputUri
@@ -75,22 +95,6 @@ class MainActivity : AppCompatActivity() {
                 deliver(arrayOf(uri))
             } else {
                 cleanupCameraFile()
-                deliver(null)
-            }
-        }
-
-    private val pdfLauncher =
-        registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-            if (uri != null) {
-                try {
-                    contentResolver.takePersistableUriPermission(
-                        uri,
-                        Intent.FLAG_GRANT_READ_URI_PERMISSION
-                    )
-                } catch (_: Exception) {
-                }
-                deliver(arrayOf(uri))
-            } else {
                 deliver(null)
             }
         }
@@ -245,7 +249,7 @@ class MainActivity : AppCompatActivity() {
             builtInZoomControls = false
             displayZoomControls = false
             setSupportZoom(false)
-            userAgentString = "$userAgentString ASDSMobile/1.4.0"
+            userAgentString = "$userAgentString ASDSMobile/1.5.0"
         }
 
         webView.webViewClient = object : WebViewClient() {
@@ -274,15 +278,8 @@ class MainActivity : AppCompatActivity() {
 
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                 val url = request?.url?.toString() ?: return false
-                if (url.startsWith("https://portal.ihre-wegbegleiterin.ch/") ||
-                    url.startsWith("https://ihre-wegbegleiterin.ch/")) return false
-                return try {
-                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-                    true
-                } catch (e: ActivityNotFoundException) {
-                    Log.w(TAG, "No app for external URL", e)
-                    true
-                }
+                if (isInternalUrl(url)) return false
+                return openExternalUrl(url)
             }
         }
 
@@ -295,23 +292,22 @@ class MainActivity : AppCompatActivity() {
                 cancelPending()
                 if (filePathCallback == null) return false
                 fileCallback = filePathCallback
-                val types = fileChooserParams?.acceptTypes
-                    ?.asSequence()
-                    ?.flatMap { it.split(',', ';').asSequence() }
-                    ?.map { it.trim().lowercase() }
-                    ?.filter { it.isNotBlank() }
-                    ?.distinct()
-                    ?.toList() ?: emptyList()
+
+                val acceptTypes = normalizeAcceptTypes(fileChooserParams?.acceptTypes)
                 val capture = fileChooserParams?.isCaptureEnabled == true
-                val acceptsImage = types.isEmpty() || types.any { it == "*/*" || it.startsWith("image/") }
-                val acceptsPdf = types.any { it == "*/*" || it == "application/*" || it == "application/pdf" }
+                val allowMultiple = fileChooserParams?.mode == FileChooserParams.MODE_OPEN_MULTIPLE
+                val acceptsImage = acceptTypes.any { it == "*/*" || it.startsWith("image/") }
+                val acceptsPdf = acceptTypes.any {
+                    it == "*/*" || it == "application/*" || it == "application/pdf"
+                }
+
                 return try {
                     when {
                         capture && acceptsImage && !acceptsPdf -> launchCamera()
-                        acceptsImage && acceptsPdf -> showSourceChooser()
-                        acceptsImage -> launchPhotoPicker()
-                        acceptsPdf -> launchPdfPicker()
-                        else -> showSourceChooser()
+                        allowMultiple -> showSourceChooser(acceptTypes, true, acceptsImage)
+                        acceptsImage && !acceptsPdf -> launchPhotoPicker()
+                        acceptsPdf && !acceptsImage -> launchDocumentPicker(acceptTypes, false)
+                        else -> showSourceChooser(acceptTypes, false, acceptsImage)
                     }
                     true
                 } catch (e: Exception) {
@@ -321,6 +317,149 @@ class MainActivity : AppCompatActivity() {
                     true
                 }
             }
+        }
+
+        webView.setDownloadListener { url, userAgent, contentDisposition, mimeType, _ ->
+            startAuthenticatedDownload(url, userAgent, contentDisposition, mimeType)
+        }
+    }
+
+    private fun isInternalUrl(url: String): Boolean {
+        return url.startsWith("https://portal.ihre-wegbegleiterin.ch/") ||
+            url.startsWith("https://ihre-wegbegleiterin.ch/")
+    }
+
+    private fun openExternalUrl(url: String): Boolean {
+        return try {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+            true
+        } catch (e: ActivityNotFoundException) {
+            Log.w(TAG, "No app for external URL", e)
+            Toast.makeText(this, R.string.external_app_missing, Toast.LENGTH_LONG).show()
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "External URL failed", e)
+            Toast.makeText(this, R.string.external_app_missing, Toast.LENGTH_LONG).show()
+            true
+        }
+    }
+
+    private fun normalizeAcceptTypes(rawTypes: Array<String>?): List<String> {
+        val types = rawTypes
+            ?.asSequence()
+            ?.flatMap { it.split(',', ';').asSequence() }
+            ?.map { it.trim().lowercase() }
+            ?.filter { it.isNotBlank() }
+            ?.distinct()
+            ?.toMutableList()
+            ?: mutableListOf()
+        if (types.isEmpty()) types += "*/*"
+        return types
+    }
+
+    private fun pickerMimeTypes(types: List<String>): Array<String> {
+        if (types.any { it == "*/*" }) return arrayOf("*/*")
+        return types.map {
+            if (it == "application/*") "application/pdf" else it
+        }.distinct().toTypedArray()
+    }
+
+    private fun showSourceChooser(types: List<String>, allowMultiple: Boolean, acceptsImage: Boolean) {
+        val labels = mutableListOf<String>()
+        val actions = mutableListOf<() -> Unit>()
+
+        labels += getString(if (allowMultiple) R.string.option_multiple_files else R.string.option_files)
+        actions += { launchDocumentPicker(types, allowMultiple) }
+
+        if (acceptsImage) {
+            labels += getString(R.string.option_camera)
+            actions += { launchCamera() }
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle(R.string.choose_source_title)
+            .setItems(labels.toTypedArray()) { _, which ->
+                actions.getOrNull(which)?.invoke() ?: deliver(null)
+            }
+            .setNegativeButton(R.string.cancel) { dialog, _ ->
+                dialog.dismiss()
+                deliver(null)
+            }
+            .setOnCancelListener { deliver(null) }
+            .show()
+    }
+
+    private fun launchPhotoPicker() {
+        try {
+            photoPickerLauncher.launch(
+                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "Photo Picker failed", e)
+            Toast.makeText(this, R.string.error_no_picker, Toast.LENGTH_LONG).show()
+            deliver(null)
+        }
+    }
+
+    private fun launchDocumentPicker(types: List<String>, allowMultiple: Boolean) {
+        try {
+            val mimeTypes = pickerMimeTypes(types)
+            if (allowMultiple) multipleDocumentLauncher.launch(mimeTypes)
+            else documentLauncher.launch(mimeTypes)
+        } catch (e: Exception) {
+            Log.e(TAG, "Document picker failed", e)
+            Toast.makeText(this, R.string.error_no_picker, Toast.LENGTH_LONG).show()
+            deliver(null)
+        }
+    }
+
+    private fun launchCamera() {
+        try {
+            val dir = File(cacheDir, "camera").apply { mkdirs() }
+            val file = File.createTempFile("ASDS_Beleg_", ".jpg", dir)
+            cameraOutputFile = file
+            cameraOutputUri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
+            cameraLauncher.launch(cameraOutputUri!!)
+        } catch (e: Exception) {
+            Log.e(TAG, "Camera failed", e)
+            cleanupCameraFile()
+            Toast.makeText(this, R.string.error_no_camera, Toast.LENGTH_LONG).show()
+            deliver(null)
+        }
+    }
+
+    private fun rememberReadPermission(uri: Uri) {
+        try {
+            contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        } catch (_: Exception) {
+            // Some providers and the system photo picker do not offer persistent grants.
+        }
+    }
+
+    private fun startAuthenticatedDownload(
+        url: String,
+        userAgent: String?,
+        contentDisposition: String?,
+        mimeType: String?
+    ) {
+        try {
+            val filename = URLUtil.guessFileName(url, contentDisposition, mimeType)
+            val request = DownloadManager.Request(Uri.parse(url)).apply {
+                setTitle(filename)
+                setDescription(getString(R.string.app_name))
+                setMimeType(mimeType)
+                setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, filename)
+                val cookies = CookieManager.getInstance().getCookie(url)
+                if (!cookies.isNullOrBlank()) addRequestHeader("Cookie", cookies)
+                if (!userAgent.isNullOrBlank()) addRequestHeader("User-Agent", userAgent)
+            }
+            val manager = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+            manager.enqueue(request)
+            Toast.makeText(this, R.string.download_started, Toast.LENGTH_SHORT).show()
+        } catch (e: Exception) {
+            Log.e(TAG, "Download failed", e)
+            Toast.makeText(this, R.string.download_failed, Toast.LENGTH_LONG).show()
         }
     }
 
@@ -369,7 +508,7 @@ class MainActivity : AppCompatActivity() {
             "trips.php", "trip.php" -> "Fahrten"
             "expenses.php" -> "Spesen & Ausgaben"
             "manual_trip.php" -> "Fahrt manuell"
-            "protocols.php" -> "Protokolle"
+            "protocols.php", "protocol_file.php" -> "Protokolle"
             "more.php" -> "Mehr"
             "pair.php" -> "Gerät koppeln"
             "logout.php" -> "Abmeldung"
@@ -381,7 +520,8 @@ class MainActivity : AppCompatActivity() {
             "appointments.php" -> bottomNavigation.menu.findItem(R.id.navAppointments).isChecked = true
             "time.php" -> bottomNavigation.menu.findItem(R.id.navTime).isChecked = true
             "trips.php", "trip.php" -> bottomNavigation.menu.findItem(R.id.navTrips).isChecked = true
-            "more.php", "expenses.php", "manual_trip.php", "protocols.php" -> bottomNavigation.menu.findItem(R.id.navMore).isChecked = true
+            "more.php", "expenses.php", "manual_trip.php", "protocols.php", "protocol_file.php" ->
+                bottomNavigation.menu.findItem(R.id.navMore).isChecked = true
             "index.php", "" -> bottomNavigation.menu.findItem(R.id.navHome).isChecked = true
         }
     }
@@ -398,83 +538,33 @@ class MainActivity : AppCompatActivity() {
         errorPanel.visibility = View.VISIBLE
     }
 
-    private fun showSourceChooser() {
-        val options = arrayOf(
-            getString(R.string.option_photo),
-            getString(R.string.option_camera),
-            getString(R.string.option_pdf)
-        )
-        AlertDialog.Builder(this)
-            .setTitle(R.string.choose_source_title)
-            .setItems(options) { _, which ->
-                when (which) {
-                    0 -> launchPhotoPicker()
-                    1 -> launchCamera()
-                    2 -> launchPdfPicker()
-                    else -> deliver(null)
-                }
-            }
-            .setNegativeButton(R.string.cancel) { dialog, _ ->
-                dialog.dismiss()
-                deliver(null)
-            }
-            .setOnCancelListener { deliver(null) }
-            .show()
-    }
-
-    private fun launchPhotoPicker() {
-        try {
-            photoPickerLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-        } catch (e: Exception) {
-            Log.e(TAG, "Photo Picker failed", e)
-            Toast.makeText(this, R.string.error_no_picker, Toast.LENGTH_LONG).show()
-            deliver(null)
-        }
-    }
-
-    private fun launchCamera() {
-        try {
-            val dir = File(cacheDir, "camera").apply { mkdirs() }
-            val file = File.createTempFile("ASDS_Beleg_", ".jpg", dir)
-            cameraOutputFile = file
-            cameraOutputUri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
-            cameraLauncher.launch(cameraOutputUri!!)
-        } catch (e: Exception) {
-            Log.e(TAG, "Camera failed", e)
-            cleanupCameraFile()
-            Toast.makeText(this, R.string.error_no_camera, Toast.LENGTH_LONG).show()
-            deliver(null)
-        }
-    }
-
-    private fun launchPdfPicker() {
-        try {
-            pdfLauncher.launch(arrayOf("application/pdf"))
-        } catch (e: Exception) {
-            Log.e(TAG, "PDF picker failed", e)
-            Toast.makeText(this, R.string.error_no_pdf, Toast.LENGTH_LONG).show()
-            deliver(null)
-        }
-    }
-
     private fun deliver(uris: Array<Uri>?) {
         val callback = fileCallback
         fileCallback = null
         cameraOutputUri = null
         cameraOutputFile = null
-        try { callback?.onReceiveValue(uris) }
-        catch (e: Exception) { Log.e(TAG, "WebView callback failed", e) }
+        try {
+            callback?.onReceiveValue(uris)
+        } catch (e: Exception) {
+            Log.e(TAG, "WebView callback failed", e)
+        }
     }
 
     private fun cancelPending() {
         val callback = fileCallback
         fileCallback = null
-        try { callback?.onReceiveValue(null) } catch (_: Exception) { }
+        try {
+            callback?.onReceiveValue(null)
+        } catch (_: Exception) {
+        }
         cleanupCameraFile()
     }
 
     private fun cleanupCameraFile() {
-        try { cameraOutputFile?.delete() } catch (_: Exception) { }
+        try {
+            cameraOutputFile?.delete()
+        } catch (_: Exception) {
+        }
         cameraOutputFile = null
         cameraOutputUri = null
     }
@@ -491,6 +581,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showError(e: Exception) {
-        Toast.makeText(this, getString(R.string.error_generic, e.message ?: e.javaClass.simpleName), Toast.LENGTH_LONG).show()
+        Toast.makeText(
+            this,
+            getString(R.string.error_generic, e.message ?: e.javaClass.simpleName),
+            Toast.LENGTH_LONG
+        ).show()
     }
 }
