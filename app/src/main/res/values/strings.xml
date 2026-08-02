@@ -31,7 +31,18 @@
     <string name="quick_trip">Fahrt manuell erfassen</string>
     <string name="quick_task">Aufgabe erstellen</string>
     <string name="quick_customer">Kundenakte öffnen</string>
+    <string name="quick_security">Sicherheit &amp; Offline</string>
     <string name="download_started">Download wurde gestartet.</string>
     <string name="download_failed">Datei konnte nicht heruntergeladen werden.</string>
     <string name="external_app_missing">Keine passende App gefunden.</string>
+    <string name="security_title">Sicherheit &amp; Offline</string>
+    <string name="security_status">Lokale Entwürfe: %1$d\nSynchronisationswarteschlange: %2$d</string>
+    <string name="security_enable_lock">App-Sperre aktivieren</string>
+    <string name="security_disable_lock">App-Sperre deaktivieren</string>
+    <string name="security_lock_now">App jetzt sperren</string>
+    <string name="security_enable_notifications">Benachrichtigungen aktivieren</string>
+    <string name="security_disable_notifications">Benachrichtigungen deaktivieren</string>
+    <string name="security_sync_now">Jetzt synchronisieren</string>
+    <string name="security_open_center">Sicherheitscenter öffnen</string>
+    <string name="security_sync_started">Synchronisation wurde gestartet.</string>
 </resources>
