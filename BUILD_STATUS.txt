@@ -1,0 +1,13 @@
+ASDS Mobile Android 1.2.1
+
+Status:
+- Reguläres Kotlin-/Gradle-Projekt vorhanden.
+- Photo Picker, Kamera und PDF-Auswahl nativ umgesetzt.
+- GitHub-Actions-Workflow für den reproduzierbaren Release-Build ergänzt.
+- Private Signaturschlüssel sind nicht enthalten.
+- Lokaler Build in dieser Umgebung nicht möglich, weil Android SDK/Gradle nicht installiert
+  sind und externe Downloads im Container blockiert sind.
+
+Nächster Schritt:
+GitHub Actions erzeugt app-release-unsigned.apk. Danach wird sie ausserhalb des Repositories
+mit dem bestehenden ASDS-Mobile-Schlüssel signiert.
