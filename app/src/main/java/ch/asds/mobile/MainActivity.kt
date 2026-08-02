@@ -198,7 +198,9 @@ class MainActivity : AppCompatActivity() {
             getString(R.string.quick_appointment),
             getString(R.string.quick_protocol),
             getString(R.string.quick_expense),
-            getString(R.string.quick_trip)
+            getString(R.string.quick_trip),
+            getString(R.string.quick_task),
+            getString(R.string.quick_customer)
         )
         AlertDialog.Builder(this)
             .setTitle(R.string.quick_title)
@@ -209,6 +211,8 @@ class MainActivity : AppCompatActivity() {
                     2 -> navigateTo("protocols.php", "action=create")
                     3 -> navigateTo("expenses.php")
                     4 -> navigateTo("manual_trip.php")
+                    5 -> navigateTo("tasks.php", "action=create")
+                    6 -> navigateTo("customers.php")
                 }
             }
             .setNegativeButton(R.string.cancel, null)
@@ -249,7 +253,7 @@ class MainActivity : AppCompatActivity() {
             builtInZoomControls = false
             displayZoomControls = false
             setSupportZoom(false)
-            userAgentString = "$userAgentString ASDSMobile/1.5.0"
+            userAgentString = "$userAgentString ASDSMobile/1.6.0"
         }
 
         webView.webViewClient = object : WebViewClient() {
@@ -509,6 +513,8 @@ class MainActivity : AppCompatActivity() {
             "expenses.php" -> "Spesen & Ausgaben"
             "manual_trip.php" -> "Fahrt manuell"
             "protocols.php", "protocol_file.php" -> "Protokolle"
+            "customers.php", "customer_file.php" -> "Kunden"
+            "tasks.php" -> "Aufgaben"
             "more.php" -> "Mehr"
             "pair.php" -> "Gerät koppeln"
             "logout.php" -> "Abmeldung"
@@ -520,7 +526,8 @@ class MainActivity : AppCompatActivity() {
             "appointments.php" -> bottomNavigation.menu.findItem(R.id.navAppointments).isChecked = true
             "time.php" -> bottomNavigation.menu.findItem(R.id.navTime).isChecked = true
             "trips.php", "trip.php" -> bottomNavigation.menu.findItem(R.id.navTrips).isChecked = true
-            "more.php", "expenses.php", "manual_trip.php", "protocols.php", "protocol_file.php" ->
+            "more.php", "expenses.php", "manual_trip.php", "protocols.php", "protocol_file.php",
+            "customers.php", "customer_file.php", "tasks.php" ->
                 bottomNavigation.menu.findItem(R.id.navMore).isChecked = true
             "index.php", "" -> bottomNavigation.menu.findItem(R.id.navHome).isChecked = true
         }
