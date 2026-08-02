@@ -29,6 +29,8 @@
     <string name="quick_protocol">Protokoll erfassen</string>
     <string name="quick_expense">Spese oder Ausgabe</string>
     <string name="quick_trip">Fahrt manuell erfassen</string>
+    <string name="quick_task">Aufgabe erstellen</string>
+    <string name="quick_customer">Kundenakte öffnen</string>
     <string name="download_started">Download wurde gestartet.</string>
     <string name="download_failed">Datei konnte nicht heruntergeladen werden.</string>
     <string name="external_app_missing">Keine passende App gefunden.</string>
