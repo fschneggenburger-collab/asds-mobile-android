@@ -8,7 +8,7 @@ on:
       - '.github/BUILD_TRIGGER'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -39,6 +39,21 @@ jobs:
         with:
           gradle-version: '8.9'
 
+      - name: Android-Quellcode für 1.6.0 vorbereiten
+        shell: bash
+        run: python3 tools/prepare_v160.py
+
+      - name: Vorbereiteten Quellcode sichern
+        shell: bash
+        run: |
+          if ! git diff --quiet -- app/src/main/java/ch/asds/mobile/MainActivity.kt; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add app/src/main/java/ch/asds/mobile/MainActivity.kt
+            git commit -m "Apply ASDS Mobile 1.6.0 native shell [skip ci]"
+            git push
+          fi
+
       - name: Arbeitsordner vorbereiten
         shell: bash
         run: mkdir -p build-artifact
@@ -57,15 +72,15 @@ jobs:
         if: success()
         shell: bash
         run: |
-          cp app/build/outputs/apk/release/app-release-unsigned.apk build-artifact/ASDS_Mobile_Android_1.5.0_unsigned.apk
+          cp app/build/outputs/apk/release/app-release-unsigned.apk build-artifact/ASDS_Mobile_Android_1.6.0_unsigned.apk
           cp "$ANDROID_SDK_ROOT/build-tools/35.0.0/lib/apksigner.jar" build-artifact/apksigner.jar
-          printf 'ASDS Mobile Android 1.5.0\nUnsigned Release APK plus official Android apksigner tool.\n' > build-artifact/README.txt
+          printf 'ASDS Mobile Android 1.6.0\nUnsigned Release APK plus official Android apksigner tool.\n' > build-artifact/README.txt
 
       - name: Build-Ergebnis bereitstellen
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ASDS-Mobile-Android-1.5.0-Build-Ergebnis
+          name: ASDS-Mobile-Android-1.6.0-Build-Ergebnis
           path: build-artifact/
           if-no-files-found: error
           retention-days: 7
