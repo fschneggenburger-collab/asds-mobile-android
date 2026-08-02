@@ -11,8 +11,8 @@ android {
         applicationId = "ch.asds.mobile"
         minSdk = 31
         targetSdk = 35
-        versionCode = 60
-        versionName = "1.6.0"
+        versionCode = 71
+        versionName = "1.7.1"
     }
 
     buildTypes {
@@ -38,6 +38,7 @@ android {
 
     buildFeatures {
         viewBinding = false
+        buildConfig = true
     }
 
     packaging {
@@ -53,5 +54,7 @@ dependencies {
     implementation("androidx.activity:activity-ktx:1.9.3")
     implementation("androidx.webkit:webkit:1.12.1")
     implementation("androidx.swiperefreshlayout:swiperefreshlayout:1.1.0")
+    implementation("androidx.biometric:biometric:1.1.0")
+    implementation("androidx.work:work-runtime-ktx:2.10.1")
     implementation("com.google.android.material:material:1.12.0")
 }
