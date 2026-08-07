@@ -1,0 +1,104 @@
+name: ASDS Mobile Android Release Series
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - agent/android-v2-release-series
+    paths:
+      - '.github/RELEASE_SERIES_TRIGGER'
+      - '.github/workflows/build-release-series.yml'
+      - 'tools/fix_release_series.py'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build ${{ matrix.version }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - version: '1.8.1'
+            code: 91
+          - version: '1.8.2'
+            code: 92
+          - version: '1.9.0'
+            code: 100
+          - version: '1.9.1'
+            code: 101
+          - version: '1.9.2'
+            code: 102
+          - version: '2.0.0'
+            code: 200
+
+    steps:
+      - name: Quellcode auschecken
+        uses: actions/checkout@v4
+
+      - name: Java 17 einrichten
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Android SDK einrichten
+        uses: android-actions/setup-android@v3
+
+      - name: Android API 35 installieren
+        shell: bash
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Gradle 8.9 einrichten
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: V1.8-Basis rekonstruieren
+        shell: bash
+        run: |
+          python3 tools/prepare_mobile.py 1.7.0
+          python3 tools/fix_v171.py
+          python3 tools/fix_v171_versioncode.py
+          python3 tools/fix_v171_migration.py
+          python3 tools/fix_v180.py
+
+      - name: Release-Stufe ${{ matrix.version }} anwenden
+        shell: bash
+        run: python3 tools/fix_release_series.py '${{ matrix.version }}'
+
+      - name: Quellen prüfen
+        shell: bash
+        run: |
+          set -e
+          mkdir -p build-artifact
+          grep -q 'versionCode = ${{ matrix.code }}' app/build.gradle.kts
+          grep -q 'versionName = "${{ matrix.version }}"' app/build.gradle.kts
+          grep -q 'ASDSMobile/${{ matrix.version }}' app/src/main/java/ch/asds/mobile/MainActivity.kt
+          grep -q 'labelForTripType' app/src/main/java/ch/asds/mobile/ASDSNativeBridge.kt
+          grep -q 'failedQueueCount' app/src/main/java/ch/asds/mobile/OfflineRepository.kt
+          grep -q 'getDiagnostics' app/src/main/java/ch/asds/mobile/ASDSNativeBridge.kt
+          grep -q 'instanceId' app/src/main/java/ch/asds/mobile/AppSettings.kt
+          printf 'ASDS Mobile %s source verification: OK\nversionCode=%s\n' '${{ matrix.version }}' '${{ matrix.code }}' > build-artifact/source-verification.txt
+
+      - name: Release-APK kompilieren
+        shell: bash
+        run: |
+          set -o pipefail
+          gradle --no-daemon --stacktrace :app:clean :app:assembleRelease 2>&1 | tee build-artifact/gradle-build-${{ matrix.version }}.log
+          cp app/build/outputs/apk/release/app-release-unsigned.apk build-artifact/ASDS_Mobile_Android_${{ matrix.version }}_unsigned.apk
+          cp "$ANDROID_SDK_ROOT/build-tools/35.0.0/lib/apksigner.jar" build-artifact/apksigner.jar
+          sha256sum build-artifact/ASDS_Mobile_Android_${{ matrix.version }}_unsigned.apk > build-artifact/SHA256_unsigned.txt
+
+      - name: Build-Artefakt hochladen
+        uses: actions/upload-artifact@v4
+        with:
+          name: ASDS-Mobile-Android-${{ matrix.version }}-Unsigned
+          path: build-artifact/
+          if-no-files-found: error
+          retention-days: 7
