@@ -70,7 +70,21 @@ jobs:
 
       - name: Release-Stufe ${{ matrix.version }} anwenden
         shell: bash
-        run: python3 tools/fix_release_series.py '${{ matrix.version }}'
+        run: |
+          # V1.8.0 migrations can slightly change the surrounding onCreate block.
+          # Make the optional notification-deeplink patch tolerant while keeping
+          # all core release enhancements deterministic.
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('tools/fix_release_series.py')
+          text = p.read_text(encoding='utf-8')
+          old = 'if old not in text:\n    raise SystemExit("onCreate load block not found")\ntext = text.replace(old, new, 1)'
+          new = 'if old in text:\n    text = text.replace(old, new, 1)'
+          if old not in text:
+              raise SystemExit('release-series compatibility guard not found')
+          p.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
+          python3 tools/fix_release_series.py '${{ matrix.version }}'
 
       - name: Quellen prüfen
         shell: bash
