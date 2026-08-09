@@ -71,7 +71,9 @@ replacement = r'''    @JavascriptInterface
 
     @JavascriptInterface
     fun getDiagnostics'''
-text, count = pattern.subn(replacement, text, count=1)
+# A callable replacement is intentional: re.sub replacement strings interpret backslashes,
+# which would turn Kotlin Regex("\\s+") into the invalid Regex("\s+").
+text, count = pattern.subn(lambda _m: replacement, text, count=1)
 if count != 1:
     raise SystemExit('labelForTripType function block not found')
 
