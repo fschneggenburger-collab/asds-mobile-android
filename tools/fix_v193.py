@@ -16,6 +16,18 @@ def replace_once(path, old, new, label):
 replace_once('app/build.gradle.kts', 'versionCode = 102', 'versionCode = 103', 'version code')
 replace_once('app/build.gradle.kts', 'versionName = "1.9.2"', 'versionName = "1.9.3"', 'version name')
 
+# Keep the offline form consistent with the current ASDS time data model:
+# time entries need a customer/reference, while trip customer selection remains optional.
+p = Path('app/src/main/assets/offline_capture.html')
+text = p.read_text(encoding='utf-8')
+old = "['fk_soc','Kunde / Bezug optional','select','customers',0],['block_code','Leistungsblock optional'"
+new = "['fk_soc','Kunde / Bezug','select','customers',1],['block_code','Leistungsblock optional'"
+if old in text:
+    text = text.replace(old, new, 1)
+elif new not in text:
+    raise SystemExit('offline time customer field not found')
+p.write_text(text, encoding='utf-8')
+
 # Offline reference data (including customer names) is stored through SecureStore,
 # not in plain SharedPreferences. The timestamp itself stays in the local state prefs.
 p = Path('app/src/main/java/ch/asds/mobile/OfflineRepository.kt')
