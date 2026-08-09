@@ -1,61 +1,90 @@
 #!/usr/bin/env python3
 """Apply ASDS Mobile Android 1.9.3 on top of the generated 1.9.2 source."""
 from pathlib import Path
+import re
 
 
 def replace_once(path, old, new, label):
-    p=Path(path); text=p.read_text(encoding='utf-8')
-    if new in text: return
-    if text.count(old)!=1: raise SystemExit(f'{label}: expected one match, found {text.count(old)}')
-    p.write_text(text.replace(old,new,1),encoding='utf-8')
+    p = Path(path)
+    text = p.read_text(encoding='utf-8')
+    if new in text:
+        return
+    if text.count(old) != 1:
+        raise SystemExit(f'{label}: expected one match, found {text.count(old)}')
+    p.write_text(text.replace(old, new, 1), encoding='utf-8')
 
-replace_once('app/build.gradle.kts','versionCode = 102','versionCode = 103','version code')
-replace_once('app/build.gradle.kts','versionName = "1.9.2"','versionName = "1.9.3"','version name')
+replace_once('app/build.gradle.kts', 'versionCode = 102', 'versionCode = 103', 'version code')
+replace_once('app/build.gradle.kts', 'versionName = "1.9.2"', 'versionName = "1.9.3"', 'version name')
 
-p=Path('app/src/main/java/ch/asds/mobile/AppSettings.kt'); text=p.read_text(encoding='utf-8')
-old='''    fun compatibilityState(context: Context): String = prefs(context).getString("compatibility_state", "").orEmpty()\n}'''
-new='''    fun compatibilityState(context: Context): String = prefs(context).getString("compatibility_state", "").orEmpty()\n    fun setOfflineConfig(context: Context, value: String) = prefs(context).edit().putString("offline_config", value.take(300000)).putLong("offline_config_at", System.currentTimeMillis()).apply()\n    fun offlineConfig(context: Context): String = prefs(context).getString("offline_config", "{}").orEmpty()\n    fun offlineConfigAt(context: Context): Long = prefs(context).getLong("offline_config_at", 0L)\n}'''
+p = Path('app/src/main/java/ch/asds/mobile/AppSettings.kt')
+text = p.read_text(encoding='utf-8')
+old = '''    fun compatibilityState(context: Context): String = prefs(context).getString("compatibility_state", "").orEmpty()\n}'''
+new = '''    fun compatibilityState(context: Context): String = prefs(context).getString("compatibility_state", "").orEmpty()\n    fun setOfflineConfig(context: Context, value: String) = prefs(context).edit().putString("offline_config", value.take(300000)).putLong("offline_config_at", System.currentTimeMillis()).apply()\n    fun offlineConfig(context: Context): String = prefs(context).getString("offline_config", "{}").orEmpty()\n    fun offlineConfigAt(context: Context): Long = prefs(context).getLong("offline_config_at", 0L)\n}'''
 if 'fun setOfflineConfig' not in text:
-    if old not in text: raise SystemExit('AppSettings insertion point not found')
-    p.write_text(text.replace(old,new,1),encoding='utf-8')
+    if old not in text:
+        raise SystemExit('AppSettings insertion point not found')
+    p.write_text(text.replace(old, new, 1), encoding='utf-8')
 
-p=Path('app/src/main/java/ch/asds/mobile/ASDSNativeBridge.kt'); text=p.read_text(encoding='utf-8')
-marker='    @JavascriptInterface\n    fun labelForTripType(code: String): String {'
-extra='''    @JavascriptInterface fun setOfflineConfig(value: String) = AppSettings.setOfflineConfig(activity, value)\n    @JavascriptInterface fun getOfflineConfig(): String = AppSettings.offlineConfig(activity)\n    @JavascriptInterface fun getOfflineConfigAt(): Long = AppSettings.offlineConfigAt(activity)\n    @JavascriptInterface fun openOfflineCapture() = activity.runOnUiThread { activity.openOfflineCapture() }\n\n'''
+p = Path('app/src/main/java/ch/asds/mobile/ASDSNativeBridge.kt')
+text = p.read_text(encoding='utf-8')
+marker = '    @JavascriptInterface\n    fun labelForTripType(code: String): String {'
+extra = '''    @JavascriptInterface fun setOfflineConfig(value: String) = AppSettings.setOfflineConfig(activity, value)\n    @JavascriptInterface fun getOfflineConfig(): String = AppSettings.offlineConfig(activity)\n    @JavascriptInterface fun getOfflineConfigAt(): Long = AppSettings.offlineConfigAt(activity)\n    @JavascriptInterface fun openOfflineCapture() = activity.runOnUiThread { activity.openOfflineCapture() }\n\n'''
 if 'fun openOfflineCapture()' not in text:
-    if marker not in text: raise SystemExit('Bridge insertion point not found')
-    text=text.replace(marker,extra+marker,1)
-old='''        if (BuildConfig.VERSION_CODE >= 102) result.put("device_instance").put("notification_deeplink")\n        if (BuildConfig.VERSION_CODE >= 200) result.put("tripbook_v2").put("tripbook_analysis").put("tripbook_export")'''
-new='''        if (BuildConfig.VERSION_CODE >= 102) result.put("device_instance").put("notification_deeplink")\n        if (BuildConfig.VERSION_CODE >= 103) result.put("feedback").put("announcements").put("offline_capture_v1")\n        if (BuildConfig.VERSION_CODE >= 200) result.put("tripbook_v2").put("tripbook_analysis").put("tripbook_export")'''
+    if marker not in text:
+        raise SystemExit('Bridge insertion point not found')
+    text = text.replace(marker, extra + marker, 1)
+old = '''        if (BuildConfig.VERSION_CODE >= 102) result.put("device_instance").put("notification_deeplink")\n        if (BuildConfig.VERSION_CODE >= 200) result.put("tripbook_v2").put("tripbook_analysis").put("tripbook_export")'''
+new = '''        if (BuildConfig.VERSION_CODE >= 102) result.put("device_instance").put("notification_deeplink")\n        if (BuildConfig.VERSION_CODE >= 103) result.put("feedback").put("announcements").put("offline_capture_v1")\n        if (BuildConfig.VERSION_CODE >= 200) result.put("tripbook_v2").put("tripbook_analysis").put("tripbook_export")'''
 if 'offline_capture_v1' not in text:
-    if old not in text: raise SystemExit('Bridge capability insertion point not found')
-    text=text.replace(old,new,1)
-p.write_text(text,encoding='utf-8')
+    if old not in text:
+        raise SystemExit('Bridge capability insertion point not found')
+    text = text.replace(old, new, 1)
+p.write_text(text, encoding='utf-8')
 
-p=Path('app/src/main/java/ch/asds/mobile/ServerClient.kt'); text=p.read_text(encoding='utf-8')
-old='''        if (BuildConfig.VERSION_CODE >= 102) capabilities.put("device_instance").put("notification_deeplink")\n        if (BuildConfig.VERSION_CODE >= 200) capabilities.put("tripbook_v2").put("tripbook_analysis").put("tripbook_export")'''
-new='''        if (BuildConfig.VERSION_CODE >= 102) capabilities.put("device_instance").put("notification_deeplink")\n        if (BuildConfig.VERSION_CODE >= 103) capabilities.put("feedback").put("announcements").put("offline_capture_v1")\n        if (BuildConfig.VERSION_CODE >= 200) capabilities.put("tripbook_v2").put("tripbook_analysis").put("tripbook_export")'''
+p = Path('app/src/main/java/ch/asds/mobile/ServerClient.kt')
+text = p.read_text(encoding='utf-8')
+old = '''        if (BuildConfig.VERSION_CODE >= 102) capabilities.put("device_instance").put("notification_deeplink")\n        if (BuildConfig.VERSION_CODE >= 200) capabilities.put("tripbook_v2").put("tripbook_analysis").put("tripbook_export")'''
+new = '''        if (BuildConfig.VERSION_CODE >= 102) capabilities.put("device_instance").put("notification_deeplink")\n        if (BuildConfig.VERSION_CODE >= 103) capabilities.put("feedback").put("announcements").put("offline_capture_v1")\n        if (BuildConfig.VERSION_CODE >= 200) capabilities.put("tripbook_v2").put("tripbook_analysis").put("tripbook_export")'''
 if 'offline_capture_v1' not in text:
-    if old not in text: raise SystemExit('Server capability insertion point not found')
-    text=text.replace(old,new,1)
-p.write_text(text,encoding='utf-8')
+    if old not in text:
+        raise SystemExit('Server capability insertion point not found')
+    text = text.replace(old, new, 1)
+p.write_text(text, encoding='utf-8')
 
-p=Path('app/src/main/java/ch/asds/mobile/MainActivity.kt'); text=p.read_text(encoding='utf-8')
+p = Path('app/src/main/java/ch/asds/mobile/MainActivity.kt')
+text = p.read_text(encoding='utf-8')
 if 'ASDSMobile/1.9.3' not in text:
-    if 'ASDSMobile/1.9.2' not in text: raise SystemExit('1.9.2 user agent not found')
-    text=text.replace('ASDSMobile/1.9.2','ASDSMobile/1.9.3',1)
-old='''            override fun onPageFinished(view: WebView?, url: String?) {\n                super.onPageFinished(view, url)\n                injectAsdsDesign()\n                updateNativeShell(url.orEmpty())\n                pageProgress.visibility = View.GONE'''
-new='''            override fun onPageFinished(view: WebView?, url: String?) {\n                super.onPageFinished(view, url)\n                injectAsdsDesign()\n                updateNativeShell(url.orEmpty())\n                if (BuildConfig.VERSION_CODE >= 103 && url.orEmpty().startsWith(BASE_URL)) cacheOfflineConfig()\n                pageProgress.visibility = View.GONE'''
-if 'cacheOfflineConfig()' not in text:
-    if old not in text: raise SystemExit('onPageFinished insertion point not found')
-    text=text.replace(old,new,1)
-old='                if (request?.isForMainFrame == true) showLoadError()'
-new='''                if (request?.isForMainFrame == true) {\n                    if (BuildConfig.VERSION_CODE >= 103) openOfflineCapture() else showLoadError()\n                }'''
-if new not in text:
-    if old not in text: raise SystemExit('onReceivedError insertion point not found')
-    text=text.replace(old,new,1)
-marker='    override fun onSaveInstanceState(outState: Bundle) {'
-methods=r'''    fun openOfflineCapture() {
+    if 'ASDSMobile/1.9.2' not in text:
+        raise SystemExit('1.9.2 user agent not found')
+    text = text.replace('ASDSMobile/1.9.2', 'ASDSMobile/1.9.3', 1)
+
+# Cache the current reference data after a successfully loaded mobile page.
+cache_call = 'if (BuildConfig.VERSION_CODE >= 103 && url.orEmpty().startsWith(BASE_URL)) cacheOfflineConfig()'
+if cache_call not in text:
+    page_finished = re.search(r'override fun onPageFinished\(view: WebView\?, url: String\?\) \{.*?\n\s*\}', text, re.S)
+    if not page_finished:
+        raise SystemExit('onPageFinished block not found')
+    block = page_finished.group(0)
+    anchor = 'updateNativeShell(url.orEmpty())'
+    if anchor not in block:
+        raise SystemExit('onPageFinished updateNativeShell anchor not found')
+    block2 = block.replace(anchor, anchor + '\n                ' + cache_call, 1)
+    text = text[:page_finished.start()] + block2 + text[page_finished.end():]
+
+# On a real main-frame connection failure, fall back to the fully local capture page.
+error_call = 'if (BuildConfig.VERSION_CODE >= 103) openOfflineCapture() else showLoadError()'
+if error_call not in text:
+    simple = 'if (request?.isForMainFrame == true) showLoadError()'
+    if simple in text:
+        text = text.replace(simple, 'if (request?.isForMainFrame == true) {\n                    ' + error_call + '\n                }', 1)
+    else:
+        pattern = re.compile(r'if\s*\(request\?\.isForMainFrame\s*==\s*true\)\s*\{\s*showLoadError\(\)\s*\}', re.S)
+        text, count = pattern.subn('if (request?.isForMainFrame == true) {\n                    ' + error_call + '\n                }', text, count=1)
+        if count != 1:
+            raise SystemExit('onReceivedError main-frame handler not found')
+
+marker = '    override fun onSaveInstanceState(outState: Bundle) {'
+methods = r'''    fun openOfflineCapture() {
         try {
             val html = assets.open("offline_capture.html").bufferedReader(Charsets.UTF_8).use { it.readText() }
             currentPageLabel = "Offline-Erfassung"
@@ -81,7 +110,9 @@ methods=r'''    fun openOfflineCapture() {
 
 '''
 if 'fun openOfflineCapture() {' not in text:
-    if marker not in text: raise SystemExit('MainActivity method insertion point not found')
-    text=text.replace(marker,methods+marker,1)
-p.write_text(text,encoding='utf-8')
+    if marker not in text:
+        raise SystemExit('MainActivity method insertion point not found')
+    text = text.replace(marker, methods + marker, 1)
+
+p.write_text(text, encoding='utf-8')
 print('ASDS Mobile Android 1.9.3 enhancements applied (versionCode 103)')
