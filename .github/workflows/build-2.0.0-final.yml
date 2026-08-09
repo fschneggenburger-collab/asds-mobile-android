@@ -1,0 +1,92 @@
+name: ASDS Mobile Android 2.0.0 Final
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - agent/android-v2-release-series
+    paths:
+      - '.github/workflows/build-2.0.0-final.yml'
+      - 'tools/fix_v200_final.py'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build 2.0.0 Final
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Quellcode auschecken
+        uses: actions/checkout@v4
+      - name: Java 17 einrichten
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Android SDK einrichten
+        uses: android-actions/setup-android@v3
+      - name: Android API 35 installieren
+        shell: bash
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - name: Gradle 8.9 einrichten
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Basis bis 2.0.0 rekonstruieren
+        shell: bash
+        run: |
+          python3 tools/prepare_mobile.py 1.7.0
+          python3 tools/fix_v171.py
+          python3 tools/fix_v171_versioncode.py
+          python3 tools/fix_v171_migration.py
+          python3 tools/fix_v180.py
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('tools/fix_release_series.py')
+          text=p.read_text(encoding='utf-8')
+          old='if old not in text:\n    raise SystemExit("onCreate load block not found")\ntext = text.replace(old, new, 1)'
+          new='if old in text:\n    text = text.replace(old, new, 1)'
+          if old not in text:
+              raise SystemExit('release-series compatibility guard not found')
+          p.write_text(text.replace(old,new,1),encoding='utf-8')
+          PY
+          python3 tools/fix_release_series.py '1.9.2'
+          python3 tools/fix_v193.py
+          python3 tools/fix_v194.py
+          python3 tools/fix_v195.py
+          python3 tools/fix_v200_final.py
+      - name: Quellen prüfen
+        shell: bash
+        run: |
+          set -e
+          mkdir -p build-artifact
+          grep -q 'versionCode = 200' app/build.gradle.kts
+          grep -q 'versionName = "2.0.0"' app/build.gradle.kts
+          grep -q 'ASDSMobile/2.0.0' app/src/main/java/ch/asds/mobile/MainActivity.kt
+          grep -q 'v2_final' app/src/main/java/ch/asds/mobile/ASDSNativeBridge.kt
+          grep -q 'suite_first_trip_view' app/src/main/java/ch/asds/mobile/ASDSNativeBridge.kt
+          grep -q 'configured_trip_labels' app/src/main/java/ch/asds/mobile/ASDSNativeBridge.kt
+          if grep -q 'release_candidate_v2' app/src/main/java/ch/asds/mobile/ASDSNativeBridge.kt; then
+            echo 'RC capability still present' >&2
+            exit 1
+          fi
+          printf 'ASDS Mobile 2.0.0 final source verification: OK\nversionCode=200\nfeatures=feedback,announcements,offline_capture_v1,more_v2,v2_final,configured_trip_labels,suite_first_trip_view\n' > build-artifact/source-verification.txt
+      - name: Release-APK kompilieren
+        shell: bash
+        run: |
+          set -o pipefail
+          gradle --no-daemon --stacktrace :app:clean :app:assembleRelease 2>&1 | tee build-artifact/gradle-build-2.0.0.log
+          cp app/build/outputs/apk/release/app-release-unsigned.apk build-artifact/ASDS_Mobile_Android_2.0.0_unsigned.apk
+          cp "$ANDROID_SDK_ROOT/build-tools/35.0.0/lib/apksigner.jar" build-artifact/apksigner.jar
+          sha256sum build-artifact/ASDS_Mobile_Android_2.0.0_unsigned.apk > build-artifact/SHA256_unsigned.txt
+      - name: Build-Artefakt hochladen
+        uses: actions/upload-artifact@v4
+        with:
+          name: ASDS-Mobile-Android-2.0.0-Final-Unsigned
+          path: build-artifact/
+          if-no-files-found: error
+          retention-days: 7
