@@ -16,19 +16,28 @@ def replace_once(path, old, new, label):
 replace_once('app/build.gradle.kts', 'versionCode = 102', 'versionCode = 103', 'version code')
 replace_once('app/build.gradle.kts', 'versionName = "1.9.2"', 'versionName = "1.9.3"', 'version name')
 
-p = Path('app/src/main/java/ch/asds/mobile/AppSettings.kt')
+# Offline reference data (including customer names) is stored through SecureStore,
+# not in plain SharedPreferences. The timestamp itself stays in the local state prefs.
+p = Path('app/src/main/java/ch/asds/mobile/OfflineRepository.kt')
 text = p.read_text(encoding='utf-8')
-old = '''    fun compatibilityState(context: Context): String = prefs(context).getString("compatibility_state", "").orEmpty()\n}'''
-new = '''    fun compatibilityState(context: Context): String = prefs(context).getString("compatibility_state", "").orEmpty()\n    fun setOfflineConfig(context: Context, value: String) = prefs(context).edit().putString("offline_config", value.take(300000)).putLong("offline_config_at", System.currentTimeMillis()).apply()\n    fun offlineConfig(context: Context): String = prefs(context).getString("offline_config", "{}").orEmpty()\n    fun offlineConfigAt(context: Context): Long = prefs(context).getLong("offline_config_at", 0L)\n}'''
-if 'fun setOfflineConfig' not in text:
+if 'OFFLINE_CONFIG_KEY' not in text:
+    old = '''        private const val DRAFTS_KEY = "drafts_v1"\n        private const val QUEUE_KEY = "queue_v1"'''
+    new = '''        private const val DRAFTS_KEY = "drafts_v1"\n        private const val QUEUE_KEY = "queue_v1"\n        private const val OFFLINE_CONFIG_KEY = "offline_config_v1"'''
     if old not in text:
-        raise SystemExit('AppSettings insertion point not found')
-    p.write_text(text.replace(old, new, 1), encoding='utf-8')
+        raise SystemExit('OfflineRepository key insertion point not found')
+    text = text.replace(old, new, 1)
+if 'fun setOfflineConfig(value: String)' not in text:
+    marker = '    @Synchronized fun clearQueue() = secureStore.put(QUEUE_KEY, JSONArray().toString())\n'
+    extra = '''    @Synchronized fun setOfflineConfig(value: String) {\n        secureStore.put(OFFLINE_CONFIG_KEY, value.take(300000))\n        settings.edit().putLong("offline_config_at", System.currentTimeMillis()).apply()\n    }\n    @Synchronized fun offlineConfig(): String = secureStore.get(OFFLINE_CONFIG_KEY, "{}")\n    fun offlineConfigAt(): Long = settings.getLong("offline_config_at", 0L)\n'''
+    if marker not in text:
+        raise SystemExit('OfflineRepository method insertion point not found')
+    text = text.replace(marker, marker + extra, 1)
+p.write_text(text, encoding='utf-8')
 
 p = Path('app/src/main/java/ch/asds/mobile/ASDSNativeBridge.kt')
 text = p.read_text(encoding='utf-8')
 marker = '    @JavascriptInterface\n    fun labelForTripType(code: String): String {'
-extra = '''    @JavascriptInterface fun setOfflineConfig(value: String) = AppSettings.setOfflineConfig(activity, value)\n    @JavascriptInterface fun getOfflineConfig(): String = AppSettings.offlineConfig(activity)\n    @JavascriptInterface fun getOfflineConfigAt(): Long = AppSettings.offlineConfigAt(activity)\n    @JavascriptInterface fun openOfflineCapture() = activity.runOnUiThread { activity.openOfflineCapture() }\n\n'''
+extra = '''    @JavascriptInterface fun setOfflineConfig(value: String) = repository.setOfflineConfig(value)\n    @JavascriptInterface fun getOfflineConfig(): String = repository.offlineConfig()\n    @JavascriptInterface fun getOfflineConfigAt(): Long = repository.offlineConfigAt()\n    @JavascriptInterface fun openOfflineCapture() = activity.runOnUiThread { activity.openOfflineCapture() }\n\n'''
 if 'fun openOfflineCapture()' not in text:
     if marker not in text:
         raise SystemExit('Bridge insertion point not found')
@@ -58,7 +67,6 @@ if 'ASDSMobile/1.9.3' not in text:
         raise SystemExit('1.9.2 user agent not found')
     text = text.replace('ASDSMobile/1.9.2', 'ASDSMobile/1.9.3', 1)
 
-# Cache the current reference data after a successfully loaded mobile page.
 cache_call = 'if (BuildConfig.VERSION_CODE >= 103 && url.orEmpty().startsWith(BASE_URL)) cacheOfflineConfig()'
 if cache_call not in text:
     page_finished = re.search(r'override fun onPageFinished\(view: WebView\?, url: String\?\) \{.*?\n\s*\}', text, re.S)
@@ -71,7 +79,6 @@ if cache_call not in text:
     block2 = block.replace(anchor, anchor + '\n                ' + cache_call, 1)
     text = text[:page_finished.start()] + block2 + text[page_finished.end():]
 
-# On a real main-frame connection failure, fall back to the fully local capture page.
 error_call = 'if (BuildConfig.VERSION_CODE >= 103) openOfflineCapture() else showLoadError()'
 if error_call not in text:
     simple = 'if (request?.isForMainFrame == true) showLoadError()'
