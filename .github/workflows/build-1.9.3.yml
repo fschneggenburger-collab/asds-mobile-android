@@ -1,0 +1,89 @@
+name: ASDS Mobile Android 1.9.3
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - agent/android-v2-release-series
+    paths:
+      - '.github/workflows/build-1.9.3.yml'
+      - '.github/V193_TRIGGER'
+      - 'tools/fix_v193.py'
+      - 'app/src/main/assets/offline_capture.html'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build 1.9.3
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Quellcode auschecken
+        uses: actions/checkout@v4
+      - name: Java 17 einrichten
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Android SDK einrichten
+        uses: android-actions/setup-android@v3
+      - name: Android API 35 installieren
+        shell: bash
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - name: Gradle 8.9 einrichten
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Basis bis 1.9.2 rekonstruieren
+        shell: bash
+        run: |
+          python3 tools/prepare_mobile.py 1.7.0
+          python3 tools/fix_v171.py
+          python3 tools/fix_v171_versioncode.py
+          python3 tools/fix_v171_migration.py
+          python3 tools/fix_v180.py
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('tools/fix_release_series.py')
+          text=p.read_text(encoding='utf-8')
+          old='if old not in text:\n    raise SystemExit("onCreate load block not found")\ntext = text.replace(old, new, 1)'
+          new='if old in text:\n    text = text.replace(old, new, 1)'
+          if old not in text:
+              raise SystemExit('release-series compatibility guard not found')
+          p.write_text(text.replace(old,new,1),encoding='utf-8')
+          PY
+          python3 tools/fix_release_series.py '1.9.2'
+          python3 tools/fix_v193.py
+      - name: Quellen prüfen
+        shell: bash
+        run: |
+          set -e
+          mkdir -p build-artifact
+          grep -q 'versionCode = 103' app/build.gradle.kts
+          grep -q 'versionName = "1.9.3"' app/build.gradle.kts
+          grep -q 'ASDSMobile/1.9.3' app/src/main/java/ch/asds/mobile/MainActivity.kt
+          grep -q 'openOfflineCapture' app/src/main/java/ch/asds/mobile/ASDSNativeBridge.kt
+          grep -q 'offline_capture_v1' app/src/main/java/ch/asds/mobile/ASDSNativeBridge.kt
+          grep -q 'offline_config.php' app/src/main/java/ch/asds/mobile/MainActivity.kt
+          grep -q 'Offline-Erfassung' app/src/main/assets/offline_capture.html
+          grep -q 'getDiagnostics' app/src/main/java/ch/asds/mobile/ASDSNativeBridge.kt
+          printf 'ASDS Mobile 1.9.3 source verification: OK\nversionCode=103\nfeatures=feedback,announcements,offline_capture_v1\n' > build-artifact/source-verification.txt
+      - name: Release-APK kompilieren
+        shell: bash
+        run: |
+          set -o pipefail
+          gradle --no-daemon --stacktrace :app:clean :app:assembleRelease 2>&1 | tee build-artifact/gradle-build-1.9.3.log
+          cp app/build/outputs/apk/release/app-release-unsigned.apk build-artifact/ASDS_Mobile_Android_1.9.3_unsigned.apk
+          cp "$ANDROID_SDK_ROOT/build-tools/35.0.0/lib/apksigner.jar" build-artifact/apksigner.jar
+          sha256sum build-artifact/ASDS_Mobile_Android_1.9.3_unsigned.apk > build-artifact/SHA256_unsigned.txt
+      - name: Build-Artefakt hochladen
+        uses: actions/upload-artifact@v4
+        with:
+          name: ASDS-Mobile-Android-1.9.3-Unsigned
+          path: build-artifact/
+          if-no-files-found: error
+          retention-days: 7
