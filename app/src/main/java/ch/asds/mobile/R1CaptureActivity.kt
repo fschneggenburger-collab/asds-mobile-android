@@ -54,7 +54,7 @@ class R1CaptureActivity : AppCompatActivity() {
         screen = scroll
         if (AppSettings.biometricEnabled(this)) screen.visibility = View.INVISIBLE
         setContentView(scroll)
-        body.addView(title("ASDS Mobile 2.0.1 – R1 Erfassung"))
+        body.addView(title("ASDS Mobile 2.0.2 – R1 Erfassung"))
         body.addView(note("Offline erfassen · serverseitige Freigabe · kein automatisches Überschreiben"))
         form = body
         addField("work_date", "Datum (JJJJ-MM-TT)", SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date()))
