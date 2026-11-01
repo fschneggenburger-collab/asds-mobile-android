@@ -1,4 +1,4 @@
-# ASDS Mobile 2.0.1 – Entwicklungs-, Build- und Signieranleitung
+# ASDS Mobile 2.0.2 – Entwicklungs-, Build- und Signieranleitung
 
 ## 1. Projekt aus GitHub öffnen
 Repository: https://github.com/fschneggenburger-collab/asds-mobile-android
@@ -39,7 +39,7 @@ Achtung: Debug-APK wird mit lokalem Android-Debug-Zertifikat signiert; sie ist
 Die 2.0.0-APK verwendet ein Release-Zertifikat:
 - Subject: `CN=ASDS Mobile Release, OU=ASDS Mobile, O=Aufsuchende Soziale Dienste Schneggenburger, C=CH`
 - SHA-256: `B3:BC:B0:F1:7F:66:91:D8:52:56:15:B8:53:FF:68:E9:3B:27:C0:B5:E8:80:05:48:EC:F1:95:15:A3:C5:93:C2`
-- Vorheriger `versionCode` 200, neuer 201.
+- Vorheriger `versionCode` 200, neuer 202 (2.0.1 = 201).
 
 In Android Studio:
 1. **Build > Generate Signed App Bundle / APK**.
@@ -75,7 +75,7 @@ Private Passwörter, `*.jks`, `*.keystore`, `keystore.properties`,
   Migration testen und explizit bereitstellen, statt DB-Daten zu verwerfen.
 - WorkManager erledigt vorhandene Offline-Queue und R1-Retry bei Netzverbindung.
 - Native Biometrie, Kamera, Fotos, Dokumentenauswahl, Benachrichtigungen und
-  bisherige Webseiten bleiben im 2.0.1-Quellstand.
+  bisherige Webseiten bleiben im 2.0.2-Quellstand.
 - R1-HTTP-Schnittstelle: kundenspezifische Serverprüfung, Vertragsheader,
   Idempotenz, Konflikte, Sperren und Berechtigungen im Staging testen.
 
@@ -85,3 +85,27 @@ erhöhen und `versionName` anpassen. Der alte Python-Releasegenerator wird
 **nicht** mehr ausgeführt. Standardbuild mittels Android Studio oder
 `./gradlew`. Signieren weiterhin ausschliesslich lokal mit dem ASDS-Release-Keystore.
 Kein automatischer Play-Store-Upload im CI-Prozess.
+
+## 7. Kilometer-Korrektur 2.0.2
+Bei Arbeitszeit unter **Offline-Erfassung** sind jetzt Abrechenbare Kilometer,
+Kilometeransatz CHF/km und optionale Terminverknüpfung vorhanden. Ein
+Kilometerbetrag wird vor dem Speichern in CHF angezeigt.
+
+Wichtig: Die produktive Mobile-Server-Installation ist noch nicht auf 2.0.1
+aktualisiert. Offline-Einträge mit Kilometern/Termin werden daher gespeichert,
+aber bis zu einer bestätigten Serverkompatibilität **nicht** automatisch
+übertragen. Nach der separaten Serveraktualisierung Online-Ansicht laden,
+damit `offline_config` erneuert wird, dann die Warteschlange synchronisieren.
+
+Das R1-Formular bleibt eine zusätzliche Erfassungsmöglichkeit. Die
+bestehende Offline-Zeiterfassung verwendet weiter `queue_v1`; hier werden
+identische `km` und `billable_km` als Kompatibilitäts-Aliase mitgesendet.
+Dadurch entsteht nur **ein Zeiteintrag**, keine zusätzliche Fahrt.
+Abrechnungskorrektheit und In-Place-Upgrades müssen auf Test-ERP/Gerät
+bestätigt werden, siehe `docs/ASDS_ANDROID_2_0_2_KM_TESTPLAN.md`.
+
+**Update eines bereits in Android Studio eingebundenen Projekts:**
+Im Branch `develop/android-studio-2.0.1-maintainable` `git pull`,
+Gradle synchronisieren, Testversion auf einem separaten Gerät prüfen.
+Die APK 2.0.2 zur Installation über 2.0.1 mit dem unveränderten
+ASDS-Release-Keystore in Android Studio signieren. Nicht deinstallieren.
