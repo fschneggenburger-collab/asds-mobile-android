@@ -1,0 +1,95 @@
+name: Materialize 2.0.1 Android Studio Sources (one-time)
+on:
+  workflow_dispatch:
+  push:
+    branches: [develop/android-studio-2.0.1-maintainable]
+    paths:
+      - '.github/workflows/materialize-studio.yml'
+permissions:
+  contents: write
+jobs:
+  materialize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Configure Android SDK
+        shell: bash
+        run: |
+          set -e
+          export ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}"
+          SDKMANAGER="$(find "$ANDROID_SDK_ROOT/cmdline-tools" -type f -path '*/bin/sdkmanager' | sort -V | tail -n 1)"
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0"
+      - name: Recreate verified source from Android 2.0.0 and R1 exactly once
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/prepare_mobile.py 1.7.0
+          python3 tools/fix_v171.py
+          python3 tools/fix_v171_versioncode.py
+          python3 tools/fix_v171_migration.py
+          python3 tools/fix_v180.py
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('tools/fix_release_series.py')
+          source=p.read_text(encoding='utf-8')
+          old='if old not in text:\n    raise SystemExit("onCreate load block not found")\ntext = text.replace(old, new, 1)'
+          new='if old in text:\n    text = text.replace(old, new, 1)'
+          assert old in source
+          p.write_text(source.replace(old,new,1),encoding='utf-8')
+          PY
+          python3 tools/fix_release_series.py 1.9.2
+          python3 tools/fix_v193.py
+          python3 tools/fix_v194.py
+          python3 tools/fix_v195.py
+          python3 tools/fix_v200_final.py
+          python3 tools/patch_v201_v2.py
+          python3 tools/check_r1_v2.py
+      - name: Generate standard Gradle 8.9 wrapper
+        run: |
+          gradle wrapper --gradle-version 8.9 --distribution-type bin
+          chmod +x gradlew
+          test -s gradle/wrapper/gradle-wrapper.jar
+      - name: Build from regular checked-in Kotlin and Android sources
+        shell: bash
+        run: |
+          set -eo pipefail
+          mkdir -p studio-build
+          ./gradlew --no-daemon :app:assembleDebug :app:assembleRelease 2>&1 | tee studio-build/build.log
+          grep -q 'versionCode = 201' app/build.gradle.kts
+          grep -q 'versionName = "2.0.1"' app/build.gradle.kts
+          grep -q 'R1Client.sync' app/src/main/java/ch/asds/mobile/SyncWorker.kt
+          test -s app/src/main/assets/offline_capture.html
+          sha256sum app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/release/app-release-unsigned.apk > studio-build/APK_SHA256.txt
+      - name: Commit generated, build-verified source to dedicated development branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "asds-studio-source-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/build.gradle.kts app/src/main gradle/wrapper/gradle-wrapper.properties gradle/wrapper/gradle-wrapper.jar gradlew gradlew.bat
+          git status --short
+          if ! git diff --cached --quiet; then
+            git commit -m "Android Studio 2.0.1: commit all generated Kotlin, XML, assets and Gradle wrapper"
+            git push origin HEAD:develop/android-studio-2.0.1-maintainable
+          fi
+          git rev-parse HEAD > studio-build/SOURCE_COMMIT.txt
+      - name: Upload reproducible build evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-studio-source-materialization
+          path: studio-build/
+          retention-days: 14
+          if-no-files-found: warn
