@@ -60,20 +60,31 @@ object R1Client {
         return post("sync/batch.php", body)
     }
 
+    /**
+     * Follow opaque ERP cursors. Do not silently discard authorized customers
+     * or appointments after the server's first 200-row delta page.
+     */
+    private fun fetchCollection(endpoint: String): JSONArray? {
+        val data = JSONArray()
+        var cursor = ""
+        repeat(25) {
+            val path = endpoint + if (cursor.isBlank()) "" else
+                "?cursor=" + java.net.URLEncoder.encode(cursor, "UTF-8")
+            val response = get(path)
+            if (response.code != 200) return null
+            val rows = response.json.optJSONArray("items") ?: return null
+            for (i in 0 until rows.length()) data.put(rows.optJSONObject(i) ?: continue)
+            val next = response.json.optString("next_cursor", "")
+            if (next.isBlank() || next == cursor || next == "null") return data
+            cursor = next
+        }
+        // More than 5000 entries: preserve old cache, do not show incomplete data.
+        return null
+    }
+
     fun refreshLookups(store: R1Store) {
-        // The authenticated R1 endpoints enforce entity and user scope.
-        try {
-            val c = get("customers.php")
-            if (c.code == 200 && c.json.optJSONArray("items") != null) {
-                store.cacheCustomers(c.json.getJSONArray("items"))
-            }
-        } catch (_: Exception) { }
-        try {
-            val a = get("appointments.php")
-            if (a.code == 200 && a.json.optJSONArray("items") != null) {
-                store.cacheAppointments(a.json.getJSONArray("items"))
-            }
-        } catch (_: Exception) { }
+        try { fetchCollection("customers.php")?.let(store::cacheCustomers) } catch (_: Exception) {}
+        try { fetchCollection("appointments.php")?.let(store::cacheAppointments) } catch (_: Exception) {}
     }
 
     fun sync(context: Context): Boolean {
