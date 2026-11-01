@@ -96,7 +96,10 @@ object R1Client {
                 // A failed item might have been committed on the server even if the
                 // HTTP response was lost. Probe first; retry a KNOWN failed server key
                 // through /sync/retry, never through another new batch.
-                var res: Response
+                // Defensive fallback for Kotlin's definite-assignment check.
+                // All normal probe branches either assign res or continue above.
+                var res = Response(500, JSONObject().put("error",
+                    JSONObject().put("code", "SERVER_ERROR")), 0L)
                 var one: JSONObject? = null
                 if (row.optString("status") == "failed") {
                     val probe = get("sync/status.php?source_key=" +
