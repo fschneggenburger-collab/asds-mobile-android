@@ -110,6 +110,22 @@ class OfflineRepository(context: Context) {
         writeQueue(queue)
     }
 
+    /**
+     * A business rejection must never drop a persisted offline record. Only
+     * an explicit manual retry can reactivate HOLD. While a server upgrade is
+     * pending, a compatible config refresh or manual retry may reactivate it.
+     */
+    @Synchronized
+    fun holdQueueItem(id: String, message: String, waitingForServer: Boolean = false) {
+        val queue = listQueueRaw()
+        queue.firstOrNull { it.optString("id") == id }?.apply {
+            put("state", if (waitingForServer) "waiting_server" else "blocked")
+            put("lastError", message.take(500))
+            put("nextAttemptAt", if (waitingForServer) System.currentTimeMillis() + 300_000L else Long.MAX_VALUE)
+        }
+        writeQueue(queue)
+    }
+
     @Synchronized
     fun removeQueueItem(id: String, clearDraft: Boolean) {
         val queue = listQueueRaw()
