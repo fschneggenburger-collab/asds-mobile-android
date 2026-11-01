@@ -11,15 +11,36 @@ class SyncWorker(appContext: Context, params: WorkerParameters) : CoroutineWorke
         val repository = OfflineRepository(applicationContext)
         var hadTemporaryFailure = false
         repository.readyQueueRaw().forEach { item ->
+            val id = item.optString("id")
+            // Until the Mobile Server 2.0.1 capability is actually cached,
+            // never hand extended km/appointment time payloads to a legacy
+            // endpoint that might return HTTP 200 while silently dropping them.
+            if (LegacyOfflineTimeSync.requiresV201Server(item) &&
+                !LegacyOfflineTimeSync.supportsV201Server(repository.offlineConfig())) {
+                repository.holdQueueItem(id,
+                    "Server 2.0.1 für abrechenbare Kilometer / Termin noch nicht bestätigt", true)
+                hadTemporaryFailure = true
+                return@forEach
+            }
             try {
                 val response = ServerClient.postForm(item)
-                if (response.code in 200..399) repository.removeQueueItem(item.optString("id"), true)
-                else {
-                    repository.markQueueFailure(item.optString("id"), "HTTP ${response.code}")
-                    if (response.code >= 500 || response.code == 408 || response.code == 429) hadTemporaryFailure = true
+                when (LegacyOfflineTimeSync.decision(item, response.code, response.body)) {
+                    LegacyOfflineTimeSync.Decision.CONFIRMED -> repository.removeQueueItem(id, true)
+                    LegacyOfflineTimeSync.Decision.TRANSIENT -> {
+                        repository.markQueueFailure(id,
+                            LegacyOfflineTimeSync.failureReason(response.code, response.body))
+                        hadTemporaryFailure = true
+                    }
+                    LegacyOfflineTimeSync.Decision.HOLD -> {
+                        repository.holdQueueItem(id,
+                            LegacyOfflineTimeSync.failureReason(response.code, response.body))
+                        hadTemporaryFailure = true
+                    }
                 }
-            } catch (error: Exception) {
-                repository.markQueueFailure(item.optString("id"), error.message ?: error.javaClass.simpleName)
+            } catch (_: Exception) {
+                // Exact client_id and POST body stay unchanged; the server's
+                // unique client-id/payload-hash mapping makes retry idempotent.
+                repository.markQueueFailure(id, "Netzwerk-/Übertragungsfehler")
                 hadTemporaryFailure = true
             }
         }
