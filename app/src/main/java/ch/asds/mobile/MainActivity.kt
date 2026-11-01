@@ -342,7 +342,7 @@ class MainActivity : AppCompatActivity() {
             val offlineFunctions = assets.open("offline_time_202.js")
                 .bufferedReader(Charsets.UTF_8).use { it.readText() }
             check(baseHtml.contains(scriptTag)) { "Offline time JS marker missing" }
-            val html = baseHtml.replace(scriptTag, "<script>\\n" + offlineFunctions + "\\n</script>")
+            val html = baseHtml.replace(scriptTag, "<script>" + offlineFunctions + "</script>")
             currentPageLabel = "Offline-Erfassung"
             updateSubtitle()
             errorPanel.visibility = View.GONE
