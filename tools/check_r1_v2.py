@@ -12,7 +12,7 @@ require("app/src/main/assets/offline_capture.html",
 require("app/src/main/java/ch/asds/mobile/OfflineRepository.kt",
     "saveDraft","loadDraft","clearDraftPrefix","enqueue","listQueueForUi","readyQueueRaw")
 require("app/src/main/java/ch/asds/mobile/MainActivity.kt",
-    "Biometric","showNativeSecurityMenu","showNativeLeadershipMenu",
+    "securityController","showNativeSecurityMenu","showNativeLeadershipMenu",
     "WebChromeClient","onShowFileChooser","R1CaptureActivity",
     "startAuthenticatedDownload","ASDSMobile/2.0.1")
 require("app/src/main/java/ch/asds/mobile/ASDSNativeBridge.kt",
