@@ -57,7 +57,7 @@ jobs:
           git archive --format=zip --output=studio-build/ASDS_Mobile_AndroidStudio_2.0.2_Project.zip HEAD \
             app/src app/build.gradle.kts app/proguard-rules.pro \
             build.gradle.kts settings.gradle.kts gradle.properties \
-            gradlew gradlew.bat gradle/wrapper .gitignore README.md docs tools/test_offline_time_202.cjs
+            gradlew gradlew.bat gradle/wrapper .gitignore README.md docs tools/test_offline_time_202.cjs .github/workflows/studio-ci.yml
           test -f app/schemas/ch.asds.mobile.R1RoomDatabase/1.json && \
             zip -q -u studio-build/ASDS_Mobile_AndroidStudio_2.0.2_Project.zip app/schemas/ch.asds.mobile.R1RoomDatabase/1.json || true
           cp app/build/outputs/apk/debug/app-debug.apk studio-build/ASDS-Mobile-2.0.2-Debug.apk
