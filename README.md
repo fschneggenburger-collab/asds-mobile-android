@@ -1,4 +1,4 @@
-# ASDS Mobile Android 2.0.1 – Android Studio
+# ASDS Mobile Android 2.0.2 – Android Studio
 
 **Entwicklungsbranch:** `develop/android-studio-2.0.1-maintainable`  
 **Status:** Staging, kein Play-Store-Release, keine produktive ERP-Änderung.
@@ -8,8 +8,8 @@ Android-1.7–2.0.0-Releaseprozess ist die komplette Kotlin-/XML-/Asset-Implemen
 unter `app/src/main` versioniert. Der Build erzeugt sie **nicht** aus Python-Skripten.
 
 - `applicationId`: `ch.asds.mobile` (unverändert)
-- `versionName`: `2.0.1`
-- `versionCode`: `201` (Android 2.0.0: 200)
+- `versionName`: `2.0.2`
+- `versionCode`: `202` (2.0.1: 201, 2.0.0: 200)
 - JDK 17, Gradle Wrapper 8.9, Android Gradle Plugin 8.7.3
 - Kotlin 2.0.21, Room 2.6.1 / KSP, WorkManager
 - Android minSdk 31 / targetSdk 35
@@ -22,7 +22,7 @@ unter `app/src/main` versioniert. Der Build erzeugt sie **nicht** aus Python-Skr
 5. Optional `./gradlew :app:testDebugUnitTest :app:assembleDebug :app:assembleRelease`.
 6. Für den signierten Release-Build in Android Studio **Build > Generate Signed App Bundle / APK**
    wählen und **den bisherigen ASDS-Release-Keystore** laden. Niemals das Debug-Zertifikat
-   für ein Update der bestehenden 2.0.0 verwenden.
+   für ein Update der bestehenden signierten 2.0.0/2.0.1 verwenden.
 
 **Private Schlüssel und Passwörter gehören ausschliesslich auf den lokalen PC.**
 Das Repository enthält absichtlich weder einen Keystore noch Zugangsdaten oder
@@ -31,6 +31,30 @@ eine automatische Release-Signierkonfiguration.
 Die konkrete Anleitung und Prüfliste stehen unter
 [`docs/ANDROID_STUDIO_ANLEITUNG.md`](docs/ANDROID_STUDIO_ANLEITUNG.md) und
 [`docs/TESTPLAN_UPDATE_2_0_0_ZU_2_0_1.md`](docs/TESTPLAN_UPDATE_2_0_0_ZU_2_0_1.md).
+
+## 2.0.2: Kilometer in der echten Offline-Zeiterfassung
+- `app/src/main/assets/offline_capture.html`: Felder `billable_km`, `km_rate`,
+  optionale `appointment_id` und CHF-Betragsvorschau im bereits bestehenden Arbeitszeitformular.
+- `offline_time_202.js`: reine dezimale Berechnung und Termin-/Kundenvalidierung,
+  beim Offline-Laden von `MainActivity` **lokal** in die HTML-Seite eingebettet.
+- Standardansatz `default_km_rate` und `appointments` aus gespeicherter
+  Server-`offline_config`. Ohne Feld vorläufig CHF 0.70/km; Hinweis sichtbar.
+- `OfflineRepository.queue_v1`: genau **eine** unveränderte POST-Nachricht pro
+  Zeitleistung; `km` und `billable_km` sind nur kompatible Feldnamen für
+  denselben Kilometerwert (keine zusätzliche Fahrt und kein doppelter Rechnungsposten).
+- `SyncWorker` behält die Queue bei 302, HTTP 200 mit Fehlerstatus, unbekannter
+  Serverantwort, 409-Konflikt oder fehlender 2.0.1-Kilometerfähigkeit.
+  Server 2.0.1 bestätigt erfolgreiche Übernahme mit `ok=true`, `status=success`,
+  `target_id`. Wiederholungen haben denselben `client_id` und Payload-Hash.
+- `R1Client` und die separate Room-basierte R1-Warteschlange bleiben unverändert.
+- `tools/test_offline_time_202.cjs` und `LegacyOfflineTimeSyncTest.kt`
+  prüfen CHF-Rundung, Terminbindung, Datenformat und Synchronisationsbestätigung.
+
+Der bereitgestellte Mobile-Server **2.0.1** verarbeitet diese Felder bereits in
+`mobile/offline_sync.php` und `mobile/time.php`, **die Produktivinstallation
+des Servers ist laut Auftrag noch nicht aktualisiert**. Bis dahin bleiben
+erweiterte Offline-Zeiteinträge bewusst zurückgestellt. Tests und konkretes
+Abnahmeverfahren: [`docs/ASDS_ANDROID_2_0_2_KM_TESTPLAN.md`](docs/ASDS_ANDROID_2_0_2_KM_TESTPLAN.md).
 
 ## Offline-Aufbau / Bestandssicherung
 - **2.0.0-Bestand**: `OfflineRepository` und `SecureStore` (`drafts_v1`, `queue_v1`)
