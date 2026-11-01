@@ -93,12 +93,70 @@ object R1Client {
         for (row in store.pending()) {
             val key = row.optString("source_key")
             try {
-                val res = upload(row)
+                // A failed item might have been committed on the server even if the
+                // HTTP response was lost. Probe first; retry a KNOWN failed server key
+                // through /sync/retry, never through another new batch.
+                var res: Response
+                var one: JSONObject? = null
+                if (row.optString("status") == "failed") {
+                    val probe = get("sync/status.php?source_key=" +
+                        java.net.URLEncoder.encode(key, "UTF-8"))
+                    when {
+                        probe.code == 200 -> {
+                            val saved = probe.json.optJSONObject("result")
+                            when (saved?.optString("status")) {
+                                "success" -> one = saved
+                                "conflict" -> one = saved
+                                "failed" -> {
+                                    // /sync/retry verifies server-side retryable status;
+                                    // business failures always remain blocked.
+                                    res = post("sync/retry.php", JSONObject().put("source_key", key))
+                                    one = res.json.optJSONObject("result")
+                                }
+                                else -> {
+                                    store.updateStatus(key, "failed",
+                                        "Serververarbeitung noch nicht abgeschlossen", true)
+                                    retryNeeded = true
+                                    continue
+                                }
+                            }
+                            if (one != null && saved?.optString("status") != "failed") {
+                                val state = one.optString("status")
+                                store.updateStatus(key,
+                                    if (state == "success") "success" else "conflict",
+                                    one.optString("last_error", ""),
+                                    false, one.optInt("server_id"), one.optInt("revision"))
+                                continue
+                            }
+                        }
+                        probe.code == 404 -> {
+                            // Request may have failed before server registration;
+                            // exact original envelope/key/hash is resent idempotently.
+                            res = upload(row)
+                            one = res.json.optJSONArray("results")?.optJSONObject(0)
+                        }
+                        probe.code == 401 || probe.code == 403 || probe.code == 426 -> {
+                            store.updateStatus(key, "failed", "HTTP " + probe.code +
+                                " – Anmeldung/Vertrag prüfen", false)
+                            continue
+                        }
+                        else -> {
+                            val transient = probe.code == 429 || probe.code >= 500
+                            store.updateStatus(key, "failed", "Statusabfrage HTTP " + probe.code,
+                                transient, retryAfterSeconds = probe.retryAfter)
+                            retryNeeded = retryNeeded || transient
+                            continue
+                        }
+                    }
+                } else {
+                    res = upload(row)
+                    one = res.json.optJSONArray("results")?.optJSONObject(0)
+                }
                 if (res.code == 401 || res.code == 403 || res.code == 426) {
                     store.updateStatus(key, "failed", "HTTP " + res.code + " – Anmeldung/Vertrag prüfen", false)
                     continue
                 }
-                val one = res.json.optJSONArray("results")?.optJSONObject(0)
+                one = one ?: res.json.optJSONObject("result")
                 if (one != null) {
                     val state = one.optString("status", "failed")
                     if (state == "success") {
