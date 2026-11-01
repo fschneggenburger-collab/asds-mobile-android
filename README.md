@@ -1,111 +1,69 @@
-# ASDS Mobile Android 1.2.1
+# ASDS Mobile Android 2.0.1 – Android Studio
 
-Reguläres Android-Studio-/Gradle-Projekt (Kotlin) als Ersatz für den handgebauten DEX-Generator.
+**Entwicklungsbranch:** `develop/android-studio-2.0.1-maintainable`  
+**Status:** Staging, kein Play-Store-Release, keine produktive ERP-Änderung.
 
-## Anforderungen erfüllt
+Dies ist das **direkt baubare Android-Studio-Projekt**. Im Gegensatz zum historischen
+Android-1.7–2.0.0-Releaseprozess ist die komplette Kotlin-/XML-/Asset-Implementierung
+unter `app/src/main` versioniert. Der Build erzeugt sie **nicht** aus Python-Skripten.
 
-| # | Anforderung | Umsetzung |
-|---|-------------|-----------|
-| 1 | package `ch.asds.mobile` | `applicationId` + namespace |
-| 2 | minSdk 31, targetSdk 35 | `app/build.gradle.kts` |
-| 3 | WebView + JS + DOM Storage + Cookies | `MainActivity.configureWebView()` |
-| 4 | Session bleibt bei Update erhalten | Cookies + DOM Storage; `singleTask` + `configChanges` |
-| 5 | `onShowFileChooser` | korrekt implementiert, gibt `true` zurück |
-| 6 | image/* ohne capture → Photo Picker | `ActivityResultContracts.PickVisualMedia` |
-| 7 | image/* + capture → native Kamera | `TakePicture` + FileProvider-URI |
-| 8 | image/* + pdf → nativer Dialog | AlertDialog: Fotos / Kamera / PDF |
-| 9 | PDF → OpenDocument | `ActivityResultContracts.OpenDocument` |
-| 10 | Kein READ_MEDIA_IMAGES | nicht deklariert |
-| 11 | Keine CAMERA-Permission | nicht deklariert (System-Kamera-App) |
-| 12 | ValueCallback genau einmal | `deliverCallback` / `cancelPendingCallback` |
-| 13 | Alten Callback vor neuer Auswahl nullen | `cancelPendingCallback()` am Anfang von `onShowFileChooser` |
-| 14 | Exceptions abfangen | try/catch + Toast |
-| 15 | Rotation | `configChanges` + `saveState`/`restoreState` |
-| 16 | FileProvider | Manifest + `res/xml/file_paths.xml` |
-| 17 | URI-Flags | FileProvider + TakePicture-Contract |
-| 18 | onShowFileChooser → true | ja |
-| 19 | Vollständiger Source | dieses Projekt |
-| 20 | Kein privater Schlüssel | nur Source; Signatur separat |
+- `applicationId`: `ch.asds.mobile` (unverändert)
+- `versionName`: `2.0.1`
+- `versionCode`: `201` (Android 2.0.0: 200)
+- JDK 17, Gradle Wrapper 8.9, Android Gradle Plugin 8.7.3
+- Kotlin 2.0.21, Room 2.6.1 / KSP, WorkManager
+- Android minSdk 31 / targetSdk 35
 
-## Server-Inputs (expenses.php)
+## Android Studio
+1. Den Branch klonen oder das Android-Studio-Projekt-ZIP entpacken.
+2. Android Studio öffnen, **Open** wählen und den Ordner mit `settings.gradle.kts` öffnen.
+3. Gradle JDK **17** wählen, Android SDK Platform **35** installieren und Gradle synchronisieren.
+4. **Build > Make Project** oder **Run** für den Debug-Build.
+5. Optional `./gradlew :app:testDebugUnitTest :app:assembleDebug :app:assembleRelease`.
+6. Für den signierten Release-Build in Android Studio **Build > Generate Signed App Bundle / APK**
+   wählen und **den bisherigen ASDS-Release-Keystore** laden. Niemals das Debug-Zertifikat
+   für ein Update der bestehenden 2.0.0 verwenden.
 
-- `receipt_file` → `accept="image/*,application/pdf"` → Dialog mit drei Optionen
-- `receipt_camera` → `accept="image/*" capture="environment"` → direkt Kamera
+**Private Schlüssel und Passwörter gehören ausschliesslich auf den lokalen PC.**
+Das Repository enthält absichtlich weder einen Keystore noch Zugangsdaten oder
+eine automatische Release-Signierkonfiguration.
 
-## Build-Anleitung
+Die konkrete Anleitung und Prüfliste stehen unter
+[`docs/ANDROID_STUDIO_ANLEITUNG.md`](docs/ANDROID_STUDIO_ANLEITUNG.md) und
+[`docs/TESTPLAN_UPDATE_2_0_0_ZU_2_0_1.md`](docs/TESTPLAN_UPDATE_2_0_0_ZU_2_0_1.md).
 
-### Voraussetzungen
+## Offline-Aufbau / Bestandssicherung
+- **2.0.0-Bestand**: `OfflineRepository` und `SecureStore` (`drafts_v1`, `queue_v1`)
+  sowie die Offline-Seite `app/src/main/assets/offline_capture.html` bleiben erhalten.
+- **2.0.1-R1**: `R1RoomDatabase`, `R1Store`, `R1Client`, `R1CaptureActivity`.
+  R1-Entwürfe, Vorlagen, Referenzlisten und Queue werden als mit Android-Keystore
+  AES-GCM verschlüsselte JSON-Dokumente in Room gespeichert; ältere R1-Dokumente
+  werden beim ersten Lesen aus den verschlüsselten 2.0.1-Preferences übernommen.
+  Die bisherigen R1-Preferences bleiben für Rollback als verschlüsselte Kopie bestehen.
+- Room erstellt **keine destruktive Migration** und verändert keine 2.0.0-Offline-Daten.
+- WorkManager und SyncWorker bleiben aktiviert. R1-Synchronisation benötigt
+  eine vom Server freigegebene Testumgebung und darf nicht ungeprüft mit
+  produktiven ERP-Daten getestet werden.
 
-- Android Studio Ladybug (2024.2+) oder neuer, bzw. JDK 17 + Android SDK 35
-- Kein privater Signierschlüssel im Repo – Release-Signing erfolgt separat mit dem vorhandenen Zertifikat
-
-### Debug-APK bauen
-
-```bash
-cd ASDS_Mobile_Android
-./gradlew :app:assembleDebug
-# Ausgabe: app/build/outputs/apk/debug/app-debug.apk
-```
-
-### Release-APK (ohne Signing-Config → unsigned)
-
-```bash
-./gradlew :app:assembleRelease
-```
-
-Anschliessend mit dem bestehenden ASDS-Zertifikat signieren (jarsigner / apksigner), analog zum bisherigen Prozess.
-
-### Installation über bestehende App
-
-`applicationId` bleibt `ch.asds.mobile`. VersionCode 22 > 21 (1.2.0).  
-**Nicht deinstallieren** – Cookies/DOM-Storage der WebView-Sitzung bleiben erhalten, sofern die App aktualisiert (nicht gelöscht) wird.
-
-```bash
-adb install -r app/build/outputs/apk/debug/app-debug.apk
-```
-
-## Analyse der Crash-Ursache (APK 1.1.0)
-
-Die handgebaute APK 1.1.0 (`classes.dex` nur 3788 Bytes) enthält:
-
-- **0 try/catch-Handler** (`tries_size = 0` für alle Methoden inkl. `onShowFileChooser`, `startCameraCapture`, `startSystemPhotoPicker`, `onActivityResult`).
-- Jede `ActivityNotFoundException`, `SecurityException` oder `IllegalArgumentException` (z. B. Photo-Picker auf manchen Geräten, fehlgeschlagener MediaStore-Insert, Intent-Auflösung) führt zum sofortigen Absturz.
-- Kein `onRequestPermissionsResult` und keine robuste Intent-Absicherung.
-- Register-/outs-Probleme und fehlende Exception-Tables waren bereits in früheren Versionen bekannt; der DEX-Generator wurde laut Auftrag **nicht** weiter gepatcht.
-
-Dieses Projekt ersetzt den Generator vollständig durch standardkonformes Kotlin + AndroidX Activity Result APIs.
+**Wichtig:** Ein erfolgreicher Android-Build ist kein Beweis für das vollständige
+End-to-End-Verhalten von Offline-Synchronisation, Server-Konflikten oder
+Upgrade-Installation. Dafür sind die dokumentierten Gerätetests vorgeschrieben.
 
 ## Projektstruktur
-
 ```
-ASDS_Mobile_Android/
-├── app/
-│   ├── build.gradle.kts
-│   ├── proguard-rules.pro
-│   └── src/main/
-│       ├── AndroidManifest.xml
-│       ├── java/ch/asds/mobile/MainActivity.kt
-│       └── res/
-│           ├── layout/activity_main.xml
-│           ├── xml/file_paths.xml
-│           ├── values/{strings,themes,colors}.xml
-│           └── drawable/…
-├── build.gradle.kts
-├── settings.gradle.kts
-├── gradle.properties
-└── README.md
+app/
+  build.gradle.kts
+  src/main/java/ch/asds/mobile/  # Vollständiger Kotlin-Quellcode
+  src/main/assets/                # Offline-Erfassungsseite
+  src/main/res/                   # Android-Ressourcen
+  src/test/                       # JVM-Tests
+  src/androidTest/                # Room-Gerätetests (Emulator)
+  schemas/                        # Exportierte Room-Schemas, falls nach CI generiert
+gradle/wrapper/                    # Standard-Gradle-Wrapper
+gradlew / gradlew.bat             # Normaler Build ohne Python
+docs/                             # Bedienung, Signierung, Updateprüfung
+.github/workflows/studio-ci.yml   # Kompilieren und Android-Studio-ZIP bereitstellen
 ```
 
-## Hinweise
-
-- Photo Picker (`PickVisualMedia`) ist ab API 33 nativ; AndroidX liefert Fallback für API 31–32.
-- Kamera schreibt in `cacheDir/camera/` über FileProvider – keine Speichermedien-Berechtigung nötig.
-- Abbruch (Back / Dialog-Cancel) liefert `null` an den WebView-Callback ohne Absturz.
-- Mehrfaches Öffnen nacheinander: alter Callback wird vor dem neuen immer mit `null` geschlossen.
-
-
-## Korrekturen in 1.2.1
-
-- Gemischte WebView-Accept-Typen werden auch dann korrekt erkannt, wenn Android/WebView sie als einen String wie `image/*,application/pdf` liefert.
-- Verwaiste Kamera-Cachedateien älter als 24 Stunden werden beim Start bereinigt.
-- VersionCode auf 22 erhöht.
+Die Dateien `tools/fix_*.py` sind nur historisches Archiv im Repository und
+werden weder von Android Studio noch vom neuen CI-Workflow ausgeführt.
