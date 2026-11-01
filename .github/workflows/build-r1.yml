@@ -1,0 +1,67 @@
+name: ASDS Mobile 2.0.1 R1 – Staging Build
+
+on:
+  push:
+    branches:
+      - develop/asds-mobile-2.0.1-r1
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-r1:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+      - name: JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Android SDK
+        uses: android-actions/setup-android@v3
+      - name: Android 35
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - name: Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Reproduce legacy verified source then apply additive R1 patch
+        run: |
+          set -euo pipefail
+          python3 tools/prepare_mobile.py 1.7.0
+          python3 tools/fix_v171.py
+          python3 tools/fix_v171_versioncode.py
+          python3 tools/fix_v171_migration.py
+          python3 tools/fix_v180.py
+          python3 tools/patch_v201.py
+      - name: Verify no regression of native capabilities and contract
+        run: |
+          set -euo pipefail
+          python3 tools/check_r1_source.py
+      - name: Compile debug and unsigned release
+        run: |
+          set -o pipefail
+          mkdir -p build-artifact
+          gradle --no-daemon :app:assembleDebug :app:assembleRelease 2>&1 | tee build-artifact/gradle-2.0.1.log
+      - name: Collect APKs and provenance
+        if: success()
+        run: |
+          set -euo pipefail
+          cp app/build/outputs/apk/debug/app-debug.apk build-artifact/ASDS_Mobile_Android_2.0.1_DEBUG.apk
+          cp app/build/outputs/apk/release/app-release-unsigned.apk build-artifact/ASDS_Mobile_Android_2.0.1_UNSIGNED.apk
+          sha256sum build-artifact/*.apk > build-artifact/SHA256SUMS.txt
+          printf '%s\n' 'STAGING ONLY. Debug APK cannot replace an existing APK signed with a different certificate.' 'Unsigned release APK needs the existing private signing key before in-place update.' 'No production release and no ERP modifications.' > build-artifact/README.txt
+      - name: Upload R1 build artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ASDS-Mobile-Android-2.0.1-R1-Staging
+          path: build-artifact/
+          retention-days: 14
+          if-no-files-found: warn
