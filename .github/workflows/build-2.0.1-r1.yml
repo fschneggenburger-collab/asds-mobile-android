@@ -1,0 +1,76 @@
+name: ASDS Mobile Android 2.0.1 R1 – verified V2 base
+
+on:
+  push:
+    branches: [develop/asds-mobile-2.0.1-r1-v2]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      # ubuntu-latest already contains an SDK; setup-android@v3 currently
+      # attempts to install obsolete "tools" and fails on the hosted runner.
+      - name: Android SDK 35
+        run: |
+          export ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}"
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Rebuild exact Android 2.0.0 source, then patch R1
+        run: |
+          set -euo pipefail
+          python3 tools/prepare_mobile.py 1.7.0
+          python3 tools/fix_v171.py
+          python3 tools/fix_v171_versioncode.py
+          python3 tools/fix_v171_migration.py
+          python3 tools/fix_v180.py
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('tools/fix_release_series.py')
+          text=p.read_text(encoding='utf-8')
+          old='if old not in text:\n    raise SystemExit("onCreate load block not found")\ntext = text.replace(old, new, 1)'
+          new='if old in text:\n    text = text.replace(old, new, 1)'
+          if old not in text:
+              raise SystemExit('Release-series guard not found')
+          p.write_text(text.replace(old,new,1),encoding='utf-8')
+          PY
+          python3 tools/fix_release_series.py '1.9.2'
+          python3 tools/fix_v193.py
+          python3 tools/fix_v194.py
+          python3 tools/fix_v195.py
+          python3 tools/fix_v200_final.py
+          python3 tools/patch_v201_v2.py
+      - name: Check 2.0.0 parity and R1 contract
+        run: |
+          python3 tools/check_r1_v2.py
+      - name: Compile Android debug and unsigned release
+        run: |
+          set -o pipefail
+          mkdir -p build-artifact
+          gradle --no-daemon --stacktrace :app:assembleDebug :app:assembleRelease 2>&1 | tee build-artifact/build.log
+      - name: Collect reproducible artifacts
+        if: success()
+        run: |
+          cp app/build/outputs/apk/debug/app-debug.apk build-artifact/ASDS-Mobile-2.0.1-DEBUG.apk
+          cp app/build/outputs/apk/release/app-release-unsigned.apk build-artifact/ASDS-Mobile-2.0.1-UNSIGNED.apk
+          sha256sum build-artifact/*.apk > build-artifact/SHA256SUMS.txt
+          printf '%s\n' 'NO PRODUCTIVE RELEASE. Debug APK has a different certificate.' 'Unsigned APK needs original release signing key for in-place update.' > build-artifact/INSTALLATION_README.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ASDS-Android-2.0.1-R1-V2-Staging
+          path: build-artifact/
+          retention-days: 14
+          if-no-files-found: warn
