@@ -48,6 +48,8 @@ Nicht auf dem produktiven ERP testen.
 - [ ] Keine privaten Schlüssel/Passwörter im Repository, keine Logs mit Payloads.
 - [ ] Biometrie sperrt auch neuen R1-Erfassungsbildschirm.
 
+- [ ] Explizites lokales Datenlöschen und Remote-Wipe entfernen **auch die Room-R1-Daten**; normale Updates entfernen sie nicht.
+
 ## Freigabe
 Erst nach A–D, Testbericht, vorhandenem Release-Keystore und ausdrücklicher
 Freigabe produktionsnah installieren. CI-Build allein ist keine Produktivfreigabe.

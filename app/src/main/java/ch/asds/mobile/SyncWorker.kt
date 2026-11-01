@@ -48,6 +48,8 @@ class SyncWorker(appContext: Context, params: WorkerParameters) : CoroutineWorke
         }
         if (remote.optBoolean("wipe")) {
             try { ServerClient.deviceStatus(applicationContext, repository, acknowledgements = JSONObject().put("ack_remote_wipe", true)) } catch (_: Exception) { }
+            // A remote wipe must also remove the additive encrypted Room R1 store.
+            R1Store(applicationContext).clearForExplicitWipe()
             repository.clearAll(); CookieManager.getInstance().removeAllCookies(null)
         } else if (remote.optBoolean("logout")) {
             try { ServerClient.deviceStatus(applicationContext, repository, acknowledgements = JSONObject().put("ack_remote_logout", true)) } catch (_: Exception) { }

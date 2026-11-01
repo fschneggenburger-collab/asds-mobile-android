@@ -36,6 +36,9 @@ interface R1DocumentDao {
 
     @Query("DELETE FROM r1_secure_document WHERE documentKey = :key")
     suspend fun delete(key: String)
+
+    @Query("DELETE FROM r1_secure_document")
+    suspend fun deleteAll()
 }
 
 @Database(entities = [R1SecureDocument::class], version = 1, exportSchema = true)

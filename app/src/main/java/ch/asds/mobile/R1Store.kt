@@ -122,6 +122,14 @@ class R1Store(context: Context) {
         }
     }
 
+    /** Only for explicit local-data deletion or authenticated remote wipe.
+     * Normal upgrades, logouts and synchronization NEVER invoke this.
+     */
+    fun clearForExplicitWipe() = synchronized(GLOBAL_LOCK) {
+        runBlocking(Dispatchers.IO) { dao.deleteAll() }
+        listOf(QUEUE, DRAFT, TEMPLATES, CUSTOMERS, APPOINTMENTS).forEach(secure::remove)
+    }
+
     private fun objectValue(key: String): JSONObject = JSONObject(loadDocument(key, "{}"))
     private fun arrayValue(key: String): JSONArray = JSONArray(loadDocument(key, "[]"))
 

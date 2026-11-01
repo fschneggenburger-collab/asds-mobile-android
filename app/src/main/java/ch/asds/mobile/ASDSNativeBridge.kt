@@ -31,7 +31,10 @@ class ASDSNativeBridge(
 
     @JavascriptInterface fun listQueue(): String = repository.listQueueForUi().toString()
     @JavascriptInterface fun retrySync() { repository.resetQueueRetries(); WorkerScheduler.retryNow(activity) }
-    @JavascriptInterface fun clearLocalData() = repository.clearAll()
+    @JavascriptInterface fun clearLocalData() {
+        R1Store(activity).clearForExplicitWipe()
+        repository.clearAll()
+    }
     @JavascriptInterface fun setBiometricEnabled(enabled: Boolean) = activity.runOnUiThread { securityController.setBiometricEnabled(enabled) }
     @JavascriptInterface fun lockNow() = activity.runOnUiThread { securityController.lockNow() }
 
