@@ -62,7 +62,7 @@ jobs:
             zip -q -u studio-build/ASDS_Mobile_AndroidStudio_2.0.2_Project.zip app/schemas/ch.asds.mobile.R1RoomDatabase/1.json || true
           cp app/build/outputs/apk/debug/app-debug.apk studio-build/ASDS-Mobile-2.0.2-Debug.apk
           cp app/build/outputs/apk/release/app-release-unsigned.apk studio-build/ASDS-Mobile-2.0.2-Unsigned-Release.apk
-          sha256sum studio-build/*.apk studio-build/*Project.zip > studio-build/SHA256SUMS.txt
+          (cd studio-build && sha256sum *.apk *Project.zip > SHA256SUMS.txt)
           git rev-parse HEAD > studio-build/COMMIT.txt
           printf '%s\n' 'Staging only. No private Keystore, release publication or ERP changes.' > studio-build/INSTALLATION.txt
       - uses: actions/upload-artifact@v4
