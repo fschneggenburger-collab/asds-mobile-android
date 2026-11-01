@@ -165,7 +165,9 @@ object R1Client {
                     } else {
                         val error = one.optJSONObject("error")
                         val transient = error?.optBoolean("retryable", false) == true &&
-                            (res.code >= 500 || res.code == 429 || error.optString("code") == "SERVER_ERROR")
+                            (res.code >= 500 || res.code == 429 ||
+                                error.optString("code") == "SERVER_ERROR" ||
+                                error.optString("code") == "RATE_LIMIT")
                         val status = if (state == "conflict") "conflict" else "failed"
                         val message = error?.optString("code", "UNKNOWN") + ": " + error?.optString("message", "")
                         store.updateStatus(key, status, message, transient, retryAfterSeconds = res.retryAfter)
