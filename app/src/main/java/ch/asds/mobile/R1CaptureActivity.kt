@@ -1,6 +1,10 @@
 package ch.asds.mobile
 
 import android.os.Bundle
+import android.view.View
+import androidx.biometric.BiometricManager
+import androidx.biometric.BiometricPrompt
+import androidx.core.content.ContextCompat
 import android.content.Intent
 import android.graphics.Typeface
 import android.text.InputType
@@ -27,6 +31,9 @@ import java.util.Locale
  * uploads, biometric lock and queues are deliberately retained.
  */
 class R1CaptureActivity : AppCompatActivity() {
+    private lateinit var screen: ScrollView
+    private var authenticated = false
+    private var promptActive = false
     private lateinit var store: R1Store
     private lateinit var form: LinearLayout
     private lateinit var amount: TextView
@@ -44,6 +51,8 @@ class R1CaptureActivity : AppCompatActivity() {
             setPadding(28, 24, 28, 40)
         }
         scroll.addView(body)
+        screen = scroll
+        if (AppSettings.biometricEnabled(this)) screen.visibility = View.INVISIBLE
         setContentView(scroll)
         body.addView(title("ASDS Mobile 2.0.1 – R1 Erfassung"))
         body.addView(note("Offline erfassen · serverseitige Freigabe · kein automatisches Überschreiben"))
@@ -100,6 +109,49 @@ class R1CaptureActivity : AppCompatActivity() {
         refreshQueue()
         // Refresh server-scoped selectors without blocking the UI; cached selectors work offline.
         Thread { R1Client.refreshLookups(store) }.start()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (!AppSettings.biometricEnabled(this)) {
+            screen.visibility = View.VISIBLE
+        } else if (!authenticated && !promptActive) {
+            authenticateR1()
+        }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        if (!promptActive) {
+            authenticated = false
+            screen.visibility = View.INVISIBLE
+        }
+    }
+
+    private fun authenticateR1() {
+        val allowed = BiometricManager.Authenticators.BIOMETRIC_STRONG or
+            BiometricManager.Authenticators.DEVICE_CREDENTIAL
+        if (BiometricManager.from(this).canAuthenticate(allowed) != BiometricManager.BIOMETRIC_SUCCESS) {
+            finish()
+            return
+        }
+        promptActive = true
+        val prompt = BiometricPrompt(this, ContextCompat.getMainExecutor(this),
+            object : BiometricPrompt.AuthenticationCallback() {
+                override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                    authenticated = true
+                    promptActive = false
+                    screen.visibility = View.VISIBLE
+                }
+                override fun onAuthenticationError(code: Int, errString: CharSequence) {
+                    promptActive = false
+                    finish()
+                }
+            })
+        prompt.authenticate(BiometricPrompt.PromptInfo.Builder()
+            .setTitle("ASDS R1-Zeiterfassung entsperren")
+            .setAllowedAuthenticators(allowed)
+            .build())
     }
 
     private fun title(text: String) = TextView(this).apply {
