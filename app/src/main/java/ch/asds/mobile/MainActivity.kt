@@ -334,7 +334,15 @@ class MainActivity : AppCompatActivity() {
 
     fun openOfflineCapture() {
         try {
-            val html = assets.open("offline_capture.html").bufferedReader(Charsets.UTF_8).use { it.readText() }
+            val baseHtml = assets.open("offline_capture.html").bufferedReader(Charsets.UTF_8).use { it.readText() }
+            // WebView uses the portal URL as base; a relative <script src> would
+            // attempt a remote download and fail offline. Inject the packaged
+            // JS asset directly instead. No server or file:// access required.
+            val scriptTag = "<script src=\"offline_time_202.js\"></script>"
+            val offlineFunctions = assets.open("offline_time_202.js")
+                .bufferedReader(Charsets.UTF_8).use { it.readText() }
+            check(baseHtml.contains(scriptTag)) { "Offline time JS marker missing" }
+            val html = baseHtml.replace(scriptTag, "<script>\\n" + offlineFunctions + "\\n</script>")
             currentPageLabel = "Offline-Erfassung"
             updateSubtitle()
             errorPanel.visibility = View.GONE
@@ -387,7 +395,7 @@ class MainActivity : AppCompatActivity() {
             builtInZoomControls = false
             displayZoomControls = false
             setSupportZoom(false)
-            userAgentString = "$userAgentString ASDSMobile/2.0.1"
+            userAgentString = "$userAgentString ASDSMobile/${BuildConfig.VERSION_NAME}"
         }
         if (WebViewFeature.isFeatureSupported(WebViewFeature.ALGORITHMIC_DARKENING)) {
             WebSettingsCompat.setAlgorithmicDarkeningAllowed(webView.settings, false)
