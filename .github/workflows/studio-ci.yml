@@ -1,7 +1,7 @@
-name: ASDS Mobile 2.0.1 Android Studio CI
+name: ASDS Mobile 2.0.2 Android Studio CI
 on:
   push:
-    branches: [develop/android-studio-2.0.1-maintainable]
+    branches: [develop/android-studio-2.0.2-maintainable]
   workflow_dispatch:
 permissions:
   contents: read
@@ -32,11 +32,17 @@ jobs:
           test -f app/src/main/assets/offline_capture.html
           test -f app/src/main/java/ch/asds/mobile/R1RoomDatabase.kt
           test -s gradle/wrapper/gradle-wrapper.jar
-          grep -q 'versionCode = 201' app/build.gradle.kts
-          grep -q 'versionName = "2.0.1"' app/build.gradle.kts
+          grep -q 'versionCode = 202' app/build.gradle.kts
+          grep -q 'versionName = "2.0.2"' app/build.gradle.kts
           grep -q 'showNativeSecurityMenu' app/src/main/java/ch/asds/mobile/MainActivity.kt
           grep -q 'showNativeLeadershipMenu' app/src/main/java/ch/asds/mobile/MainActivity.kt
           grep -q 'R1Client.sync' app/src/main/java/ch/asds/mobile/SyncWorker.kt
+          grep -q 'LegacyOfflineTimeSync.decision' app/src/main/java/ch/asds/mobile/SyncWorker.kt
+          grep -q 'billable_km' app/src/main/assets/offline_capture.html
+          grep -q 'offline_time_202.js' app/src/main/java/ch/asds/mobile/MainActivity.kt
+      - name: Run offline KM and appointment payload regression tests
+        run: |
+          node tools/test_offline_time_202.cjs
       - name: Standard Android Studio Gradle build (NO Python, NO signing secrets)
         shell: bash
         run: |
@@ -48,21 +54,21 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          git archive --format=zip --output=studio-build/ASDS_Mobile_AndroidStudio_2.0.1_Project.zip HEAD \
+          git archive --format=zip --output=studio-build/ASDS_Mobile_AndroidStudio_2.0.2_Project.zip HEAD \
             app/src app/build.gradle.kts app/proguard-rules.pro \
             build.gradle.kts settings.gradle.kts gradle.properties \
-            gradlew gradlew.bat gradle/wrapper .gitignore README.md docs
+            gradlew gradlew.bat gradle/wrapper .gitignore README.md docs tools/test_offline_time_202.cjs
           test -f app/schemas/ch.asds.mobile.R1RoomDatabase/1.json && \
-            zip -q -u studio-build/ASDS_Mobile_AndroidStudio_2.0.1_Project.zip app/schemas/ch.asds.mobile.R1RoomDatabase/1.json || true
-          cp app/build/outputs/apk/debug/app-debug.apk studio-build/ASDS-Mobile-2.0.1-Debug.apk
-          cp app/build/outputs/apk/release/app-release-unsigned.apk studio-build/ASDS-Mobile-2.0.1-Unsigned-Release.apk
+            zip -q -u studio-build/ASDS_Mobile_AndroidStudio_2.0.2_Project.zip app/schemas/ch.asds.mobile.R1RoomDatabase/1.json || true
+          cp app/build/outputs/apk/debug/app-debug.apk studio-build/ASDS-Mobile-2.0.2-Debug.apk
+          cp app/build/outputs/apk/release/app-release-unsigned.apk studio-build/ASDS-Mobile-2.0.2-Unsigned-Release.apk
           sha256sum studio-build/*.apk studio-build/*Project.zip > studio-build/SHA256SUMS.txt
           git rev-parse HEAD > studio-build/COMMIT.txt
           printf '%s\n' 'Staging only. No private Keystore, release publication or ERP changes.' > studio-build/INSTALLATION.txt
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: ASDS-Mobile-2.0.1-AndroidStudio-Project-and-Build
+          name: ASDS-Mobile-2.0.2-AndroidStudio-Project-and-Build
           path: studio-build/
           retention-days: 14
           if-no-files-found: warn
