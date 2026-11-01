@@ -1,7 +1,7 @@
 name: ASDS Mobile 2.0.2 Android Studio CI
 on:
   push:
-    branches: [develop/android-studio-2.0.2-maintainable]
+    branches: [develop/android-studio-2.0.1-maintainable]
   workflow_dispatch:
 permissions:
   contents: read
