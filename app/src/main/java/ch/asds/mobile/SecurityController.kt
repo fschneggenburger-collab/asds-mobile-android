@@ -27,8 +27,6 @@ class SecurityController(private val activity: MainActivity) {
             AppSettings.setBiometricEnabled(activity, false)
             AppSettings.setForceLock(activity, false)
             activity.setAppContentLocked(false)
-            activity.showSecurityMessage("App-Sperre wurde deaktiviert.")
-            activity.reportDeviceState()
             return
         }
         authenticate(true)
@@ -41,8 +39,7 @@ class SecurityController(private val activity: MainActivity) {
 
     private fun authenticate(enableAfterSuccess: Boolean) {
         if (promptActive) return
-        val authenticators = BiometricManager.Authenticators.BIOMETRIC_STRONG or
-            BiometricManager.Authenticators.DEVICE_CREDENTIAL
+        val authenticators = BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.DEVICE_CREDENTIAL
         val status = BiometricManager.from(activity).canAuthenticate(authenticators)
         if (status != BiometricManager.BIOMETRIC_SUCCESS) {
             AppSettings.setBiometricEnabled(activity, false)
@@ -60,10 +57,7 @@ class SecurityController(private val activity: MainActivity) {
                 override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
                     promptActive = false
                     authenticatedAt = System.currentTimeMillis()
-                    if (enableAfterSuccess) {
-                        AppSettings.setBiometricEnabled(activity, true)
-                        activity.showSecurityMessage("App-Sperre wurde aktiviert.")
-                    }
+                    if (enableAfterSuccess) AppSettings.setBiometricEnabled(activity, true)
                     AppSettings.setForceLock(activity, false)
                     activity.setAppContentLocked(false)
                     activity.reportDeviceState()
@@ -85,7 +79,7 @@ class SecurityController(private val activity: MainActivity) {
         )
         val info = BiometricPrompt.PromptInfo.Builder()
             .setTitle("ASDS Mobile entsperren")
-            .setSubtitle("Mit Fingerabdruck, Gesicht oder Geräte-PIN fortfahren")
+            .setSubtitle("Mit Biometrie oder Geräte-PIN fortfahren")
             .setAllowedAuthenticators(authenticators)
             .build()
         prompt.authenticate(info)

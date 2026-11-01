@@ -53,4 +53,10 @@
     <string name="leadership_protocols">Offene Protokolle</string>
     <string name="leadership_calendar">Teamtermine</string>
     <string name="leadership_month">Monatskontrolle</string>
+
+    <string name="security_diagnostics">Diagnose</string>
+    <string name="diagnostics_title">ASDS Mobile Diagnose</string>
+    <string name="diagnostics_copy">Diagnose kopieren</string>
+    <string name="diagnostics_copied">Diagnose wurde kopiert.</string>
+    <string name="quick_r1_time">R1: Zeiterfassung, Kilometer und Sync-Status</string>
 </resources>

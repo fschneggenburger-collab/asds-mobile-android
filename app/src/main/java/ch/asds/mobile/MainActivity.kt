@@ -1,16 +1,20 @@
 package ch.asds.mobile
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.app.DownloadManager
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Color
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.util.Log
 import android.view.View
+import android.view.WindowManager
 import android.webkit.CookieManager
 import android.webkit.URLUtil
 import android.webkit.ValueCallback
@@ -30,12 +34,16 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.app.AppCompatDelegate
+import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+import androidx.webkit.WebSettingsCompat
+import androidx.webkit.WebViewFeature
 import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.google.android.material.button.MaterialButton
 import org.json.JSONObject
@@ -60,12 +68,22 @@ class MainActivity : AppCompatActivity() {
     private lateinit var bottomNavigation: BottomNavigationView
     private lateinit var errorPanel: View
     private lateinit var retryButton: MaterialButton
+    private lateinit var offlineRepository: OfflineRepository
+    private lateinit var securityController: SecurityController
+    private lateinit var nativeBridge: ASDSNativeBridge
 
     private var fileCallback: ValueCallback<Array<Uri>>? = null
     private var cameraOutputUri: Uri? = null
     private var cameraOutputFile: File? = null
     private var currentUserName = ""
     private var currentPageLabel = "Übersicht"
+
+    private val notificationPermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            AppSettings.setNotificationsEnabled(this, granted)
+            if (granted) WorkerScheduler.retryNow(this)
+            reportDeviceState()
+        }
 
     private val photoPickerLauncher =
         registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
@@ -101,16 +119,25 @@ class MainActivity : AppCompatActivity() {
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
+        AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO)
         super.onCreate(savedInstanceState)
+        AppSettings.ensureV171SecurityDefaults(this)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         window.statusBarColor = Color.TRANSPARENT
         window.navigationBarColor = Color.TRANSPARENT
+        window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+
         setContentView(R.layout.activity_main)
         bindViews()
+        offlineRepository = OfflineRepository(this)
+        securityController = SecurityController(this)
+        nativeBridge = ASDSNativeBridge(this, offlineRepository, securityController)
+
         applySystemBarInsets()
         configureNativeShell()
         configureWebView()
         cleanupOldCameraFiles()
+        WorkerScheduler.schedule(this)
 
         WindowInsetsControllerCompat(window, window.decorView).apply {
             isAppearanceLightStatusBars = false
@@ -128,7 +155,27 @@ class MainActivity : AppCompatActivity() {
         })
 
         if (savedInstanceState != null) webView.restoreState(savedInstanceState)
-        else webView.loadUrl(PORTAL_URL)
+        else webView.loadUrl(intent.getStringExtra("asds_url")?.takeIf(::isInternalUrl) ?: PORTAL_URL)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (::securityController.isInitialized) securityController.onResume()
+        if (::offlineRepository.isInitialized) WorkerScheduler.retryNow(this)
+    }
+
+    override fun onPause() {
+        if (::securityController.isInitialized) securityController.onPause()
+        CookieManager.getInstance().flush()
+        super.onPause()
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        intent.getStringExtra("asds_url")?.takeIf(::isInternalUrl)?.let {
+            if (::webView.isInitialized) webView.loadUrl(it)
+        }
     }
 
     private fun bindViews() {
@@ -173,6 +220,10 @@ class MainActivity : AppCompatActivity() {
             webView.reload()
         }
         headerMore.setOnClickListener { showQuickActions() }
+        headerMore.setOnLongClickListener {
+            startActivity(Intent(this, R1CaptureActivity::class.java))
+            true
+        }
 
         bottomNavigation.selectedItemId = R.id.navHome
         bottomNavigation.setOnItemSelectedListener { item ->
@@ -200,7 +251,10 @@ class MainActivity : AppCompatActivity() {
             getString(R.string.quick_expense),
             getString(R.string.quick_trip),
             getString(R.string.quick_task),
-            getString(R.string.quick_customer)
+            getString(R.string.quick_customer),
+            getString(R.string.quick_security),
+            getString(R.string.quick_leadership),
+            getString(R.string.quick_r1_time)
         )
         AlertDialog.Builder(this)
             .setTitle(R.string.quick_title)
@@ -213,10 +267,93 @@ class MainActivity : AppCompatActivity() {
                     4 -> navigateTo("manual_trip.php")
                     5 -> navigateTo("tasks.php", "action=create")
                     6 -> navigateTo("customers.php")
+                    7 -> showNativeSecurityMenu()
+                    8 -> showNativeLeadershipMenu()
+                    9 -> startActivity(Intent(this, R1CaptureActivity::class.java))
                 }
             }
             .setNegativeButton(R.string.cancel, null)
             .show()
+    }
+
+    private fun showNativeLeadershipMenu() {
+        val options = arrayOf(
+            getString(R.string.leadership_cockpit),
+            getString(R.string.leadership_staff),
+            getString(R.string.leadership_approvals),
+            getString(R.string.leadership_protocols),
+            getString(R.string.leadership_calendar),
+            getString(R.string.leadership_month)
+        )
+        AlertDialog.Builder(this)
+            .setTitle(R.string.leadership_title)
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> navigateTo("leadership.php")
+                    1 -> navigateTo("staff.php")
+                    2 -> navigateTo("approvals.php")
+                    3 -> navigateTo("open_protocols.php")
+                    4 -> navigateTo("team_calendar.php")
+                    5 -> navigateTo("month_control.php")
+                }
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    private fun showNativeSecurityMenu() {
+        val biometricOn = AppSettings.biometricEnabled(this)
+        val notificationsOn = AppSettings.notificationsEnabled(this)
+        val labels = mutableListOf<String>()
+        val actions = mutableListOf<() -> Unit>()
+        labels += getString(if (biometricOn) R.string.security_disable_lock else R.string.security_enable_lock)
+        actions += { securityController.setBiometricEnabled(!biometricOn) }
+        labels += getString(R.string.security_lock_now)
+        actions += { securityController.lockNow() }
+        labels += getString(if (notificationsOn) R.string.security_disable_notifications else R.string.security_enable_notifications)
+        actions += { if (notificationsOn) { AppSettings.setNotificationsEnabled(this, false); reportDeviceState() } else requestNotificationPermission() }
+        labels += getString(R.string.security_sync_now)
+        actions += { offlineRepository.resetQueueRetries(); WorkerScheduler.retryNow(this); Toast.makeText(this, R.string.security_sync_started, Toast.LENGTH_SHORT).show() }
+        labels += getString(R.string.security_open_center)
+        actions += { navigateTo("security.php") }
+        if (BuildConfig.VERSION_CODE >= 100) { labels += getString(R.string.security_diagnostics); actions += { showNativeDiagnostics() } }
+        AlertDialog.Builder(this).setTitle(R.string.security_title)
+            .setMessage(getString(R.string.security_status, offlineRepository.draftCount(), offlineRepository.queueCount()))
+            .setItems(labels.toTypedArray()) { _, which -> actions.getOrNull(which)?.invoke() }.setNegativeButton(R.string.cancel, null).show()
+    }
+
+    private fun showNativeDiagnostics() {
+        val diagnostic = ASDSNativeBridge(this, offlineRepository, securityController).getDiagnostics()
+        AlertDialog.Builder(this).setTitle(R.string.diagnostics_title).setMessage(diagnostic)
+            .setPositiveButton(R.string.diagnostics_copy) { _, _ ->
+                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("ASDS Mobile Diagnose", diagnostic))
+                Toast.makeText(this, R.string.diagnostics_copied, Toast.LENGTH_SHORT).show()
+            }.setNegativeButton(R.string.cancel, null).show()
+    }
+
+    fun openOfflineCapture() {
+        try {
+            val html = assets.open("offline_capture.html").bufferedReader(Charsets.UTF_8).use { it.readText() }
+            currentPageLabel = "Offline-Erfassung"
+            updateSubtitle()
+            errorPanel.visibility = View.GONE
+            webView.visibility = View.VISIBLE
+            pageProgress.visibility = View.GONE
+            swipeRefresh.isRefreshing = false
+            webView.loadDataWithBaseURL(BASE_URL, html, "text/html", "UTF-8", null)
+        } catch (error: Exception) {
+            Log.e(TAG, "Offline capture could not be opened", error)
+            showLoadError()
+            Toast.makeText(this, "Offline-Erfassung konnte nicht geöffnet werden.", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun cacheOfflineConfig() {
+        val script = """
+            (function(){try{fetch('https://portal.ihre-wegbegleiterin.ch/custom/asds_mobile/mobile/offline_config.php?stage=10',{credentials:'include',cache:'no-store'}).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json()}).then(function(j){if(window.ASDSNative&&window.ASDSNative.setOfflineConfig)window.ASDSNative.setOfflineConfig(JSON.stringify(j))}).catch(function(){})}catch(e){}})();
+        """.trimIndent()
+        webView.evaluateJavascript(script, null)
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -224,13 +361,9 @@ class MainActivity : AppCompatActivity() {
         super.onSaveInstanceState(outState)
     }
 
-    override fun onPause() {
-        CookieManager.getInstance().flush()
-        super.onPause()
-    }
-
     override fun onDestroy() {
         cancelPending()
+        webView.removeJavascriptInterface("ASDSNative")
         webView.destroy()
         super.onDestroy()
     }
@@ -241,6 +374,7 @@ class MainActivity : AppCompatActivity() {
             setAcceptCookie(true)
             setAcceptThirdPartyCookies(webView, true)
         }
+        webView.addJavascriptInterface(nativeBridge, "ASDSNative")
         webView.alpha = 0f
         webView.settings.apply {
             javaScriptEnabled = true
@@ -253,7 +387,10 @@ class MainActivity : AppCompatActivity() {
             builtInZoomControls = false
             displayZoomControls = false
             setSupportZoom(false)
-            userAgentString = "$userAgentString ASDSMobile/1.6.0"
+            userAgentString = "$userAgentString ASDSMobile/2.0.1"
+        }
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.ALGORITHMIC_DARKENING)) {
+            WebSettingsCompat.setAlgorithmicDarkeningAllowed(webView.settings, false)
         }
 
         webView.webViewClient = object : WebViewClient() {
@@ -269,15 +406,20 @@ class MainActivity : AppCompatActivity() {
             override fun onPageFinished(view: WebView?, url: String?) {
                 super.onPageFinished(view, url)
                 injectAsdsDesign()
+                injectOfflineSupport()
                 updateNativeShell(url.orEmpty())
+                if (BuildConfig.VERSION_CODE >= 103 && url.orEmpty().startsWith(BASE_URL)) cacheOfflineConfig()
                 pageProgress.visibility = View.GONE
                 swipeRefresh.isRefreshing = false
                 webView.animate().alpha(1f).setDuration(160L).start()
+                reportDeviceState()
             }
 
             override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
                 super.onReceivedError(view, request, error)
-                if (request?.isForMainFrame == true) showLoadError()
+                if (request?.isForMainFrame == true) {
+                    if (BuildConfig.VERSION_CODE >= 103) openOfflineCapture() else showLoadError()
+                }
             }
 
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
@@ -371,10 +513,8 @@ class MainActivity : AppCompatActivity() {
     private fun showSourceChooser(types: List<String>, allowMultiple: Boolean, acceptsImage: Boolean) {
         val labels = mutableListOf<String>()
         val actions = mutableListOf<() -> Unit>()
-
         labels += getString(if (allowMultiple) R.string.option_multiple_files else R.string.option_files)
         actions += { launchDocumentPicker(types, allowMultiple) }
-
         if (acceptsImage) {
             labels += getString(R.string.option_camera)
             actions += { launchCamera() }
@@ -436,7 +576,6 @@ class MainActivity : AppCompatActivity() {
         try {
             contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
         } catch (_: Exception) {
-            // Some providers and the system photo picker do not offer persistent grants.
         }
     }
 
@@ -479,9 +618,27 @@ class MainActivity : AppCompatActivity() {
                         body>header{display:none!important}
                         main{max-width:920px!important;margin:0 auto!important;padding:14px 10px 30px!important}
                         .footer{padding-bottom:10px!important}
+                        input[type=date],input[type=time],input[type=datetime-local],input[type=month],input[type=week]{color:#17253a!important;-webkit-text-fill-color:#17253a!important;background-color:#fff!important;color-scheme:light!important;opacity:1!important;font-weight:600!important}
+                        input[type=date]::-webkit-datetime-edit,input[type=time]::-webkit-datetime-edit,input[type=datetime-local]::-webkit-datetime-edit,input[type=month]::-webkit-datetime-edit,input[type=week]::-webkit-datetime-edit,
+                        input::-webkit-datetime-edit-fields-wrapper,input::-webkit-datetime-edit-text,input::-webkit-datetime-edit-month-field,input::-webkit-datetime-edit-day-field,input::-webkit-datetime-edit-year-field,input::-webkit-datetime-edit-hour-field,input::-webkit-datetime-edit-minute-field,input::-webkit-datetime-edit-ampm-field{color:#17253a!important;-webkit-text-fill-color:#17253a!important;opacity:1!important}
+                        input[type=date]::-webkit-calendar-picker-indicator,input[type=datetime-local]::-webkit-calendar-picker-indicator,input[type=month]::-webkit-calendar-picker-indicator,input[type=week]::-webkit-calendar-picker-indicator,input[type=time]::-webkit-calendar-picker-indicator{opacity:1!important;filter:none!important}
                         @media(max-width:600px){.list{font-size:13px!important}.actions>.btn,.actions>button{flex:1 1 auto!important}}
                     `;
                     document.head.appendChild(style);
+                }
+                function enforceReadableDateTimeControls() {
+                    document.querySelectorAll('input[type="date"],input[type="time"],input[type="datetime-local"],input[type="month"],input[type="week"]').forEach(function(el) {
+                        el.style.setProperty('color', '#17253a', 'important');
+                        el.style.setProperty('-webkit-text-fill-color', '#17253a', 'important');
+                        el.style.setProperty('background-color', '#ffffff', 'important');
+                        el.style.setProperty('color-scheme', 'light', 'important');
+                        el.style.setProperty('opacity', '1', 'important');
+                    });
+                }
+                enforceReadableDateTimeControls();
+                if (!window.__asdsDateTimeObserver) {
+                    window.__asdsDateTimeObserver = new MutationObserver(enforceReadableDateTimeControls);
+                    window.__asdsDateTimeObserver.observe(document.documentElement, {childList:true, subtree:true, attributes:true, attributeFilter:['type','class','style']});
                 }
                 var serverHeader = document.querySelector('body > header');
                 var user = serverHeader ? serverHeader.querySelector('.user') : null;
@@ -501,6 +658,68 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun injectOfflineSupport() {
+        val script = """
+            (function(){
+                if(!window.ASDSNative || window.__asdsOfflineInstalled) return;
+                window.__asdsOfflineInstalled=true;
+                const bridge=window.ASDSNative;
+                const page=location.pathname;
+                const skipNames=new Set(['csrf','token','stage']);
+                const allowedActions=new Set(['save','start_timer','stop_timer','manual_save','complete','reopen']);
+                function label(){return (document.querySelector('h1')?.textContent || document.title || 'ASDS Eintrag').trim();}
+                function formKey(form){
+                    const action=form.querySelector('[name=action]')?.value || 'form';
+                    const id=form.querySelector('[name=id]')?.value || new URL(location.href).searchParams.get('id') || 'new';
+                    return page+'|'+action+'|'+id;
+                }
+                function snapshot(form){
+                    const values=[];
+                    form.querySelectorAll('input,select,textarea').forEach(el=>{
+                        if(!el.name || skipNames.has(el.name) || el.type==='file' || el.type==='submit' || el.type==='button') return;
+                        if((el.type==='checkbox'||el.type==='radio')&&!el.checked) return;
+                        values.push({name:el.name,value:el.value,type:el.type});
+                    });
+                    return JSON.stringify(values);
+                }
+                function restore(form,key){
+                    let raw='';try{raw=bridge.loadDraft(key)||''}catch(e){}
+                    if(!raw)return;
+                    let values=[];try{values=JSON.parse(raw)}catch(e){return;}
+                    values.forEach(item=>{
+                        const nodes=form.querySelectorAll('[name="'+CSS.escape(item.name)+'"]');
+                        nodes.forEach(el=>{
+                            if(el.type==='checkbox'||el.type==='radio')el.checked=String(el.value)===String(item.value);
+                            else el.value=item.value;
+                        });
+                    });
+                    const info=document.createElement('div');info.className='info';info.textContent='Lokaler Entwurf wurde wiederhergestellt.';form.prepend(info);
+                }
+                const success=document.querySelector('.success');
+                if(success){try{bridge.clearDraftPrefix(page+'|')}catch(e){}}
+                document.querySelectorAll('form').forEach(form=>{
+                    const action=form.querySelector('[name=action]')?.value || '';
+                    if(!allowedActions.has(action))return;
+                    const key=formKey(form);restore(form,key);
+                    let timer=0;const save=()=>{clearTimeout(timer);timer=setTimeout(()=>{try{bridge.saveDraft(key,label(),snapshot(form))}catch(e){}},350)};
+                    form.addEventListener('input',save);form.addEventListener('change',save);
+                    form.addEventListener('submit',event=>{
+                        try{bridge.saveDraft(key,label(),snapshot(form))}catch(e){}
+                        if(navigator.onLine)return;
+                        event.preventDefault();
+                        const hasFiles=Array.from(form.querySelectorAll('input[type=file]')).some(input=>input.files&&input.files.length);
+                        if(hasFiles){alert('Der Text wurde lokal gespeichert. Dateianhänge können erst mit Internetverbindung übertragen werden.');return;}
+                        const params=new URLSearchParams();
+                        new FormData(form).forEach((value,name)=>{if(typeof value==='string')params.append(name,value)});
+                        try{bridge.enqueueForm(form.action||location.href,(form.method||'POST').toUpperCase(),params.toString(),label(),key);alert('Keine Verbindung: Der Eintrag wurde in die Synchronisationswarteschlange gelegt.');}
+                        catch(e){alert('Der Eintrag wurde als lokaler Entwurf gespeichert.');}
+                    });
+                });
+            })();
+        """.trimIndent()
+        webView.evaluateJavascript(script, null)
+    }
+
     private fun updateNativeShell(url: String) {
         val page = try { Uri.parse(url).lastPathSegment.orEmpty() } catch (_: Exception) { "" }
         val pairedArea = page != "pair.php" && page != "logout.php"
@@ -515,6 +734,14 @@ class MainActivity : AppCompatActivity() {
             "protocols.php", "protocol_file.php" -> "Protokolle"
             "customers.php", "customer_file.php" -> "Kunden"
             "tasks.php" -> "Aufgaben"
+            "security.php" -> "Sicherheit & Offline"
+            "devices.php" -> "Geräteverwaltung"
+            "leadership.php" -> "Leitung"
+            "staff.php" -> "Mitarbeitende"
+            "approvals.php" -> "Freigaben"
+            "open_protocols.php" -> "Offene Protokolle"
+            "team_calendar.php" -> "Teamtermine"
+            "month_control.php" -> "Monatskontrolle"
             "more.php" -> "Mehr"
             "pair.php" -> "Gerät koppeln"
             "logout.php" -> "Abmeldung"
@@ -527,7 +754,8 @@ class MainActivity : AppCompatActivity() {
             "time.php" -> bottomNavigation.menu.findItem(R.id.navTime).isChecked = true
             "trips.php", "trip.php" -> bottomNavigation.menu.findItem(R.id.navTrips).isChecked = true
             "more.php", "expenses.php", "manual_trip.php", "protocols.php", "protocol_file.php",
-            "customers.php", "customer_file.php", "tasks.php" ->
+            "customers.php", "customer_file.php", "tasks.php", "security.php", "devices.php",
+            "leadership.php", "staff.php", "approvals.php", "open_protocols.php", "team_calendar.php", "month_control.php" ->
                 bottomNavigation.menu.findItem(R.id.navMore).isChecked = true
             "index.php", "" -> bottomNavigation.menu.findItem(R.id.navHome).isChecked = true
         }
@@ -593,5 +821,28 @@ class MainActivity : AppCompatActivity() {
             getString(R.string.error_generic, e.message ?: e.javaClass.simpleName),
             Toast.LENGTH_LONG
         ).show()
+    }
+
+    fun requestNotificationPermission() {
+        if (Build.VERSION.SDK_INT < 33 || ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
+            AppSettings.setNotificationsEnabled(this, true)
+            WorkerScheduler.retryNow(this)
+            reportDeviceState()
+        } else {
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+
+    fun setAppContentLocked(locked: Boolean) {
+        root.alpha = if (locked) 0f else 1f
+        root.isEnabled = !locked
+    }
+
+    fun showSecurityMessage(message: String) {
+        Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+    }
+
+    fun reportDeviceState() {
+        if (::offlineRepository.isInitialized) WorkerScheduler.retryNow(this)
     }
 }
