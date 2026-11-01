@@ -1,6 +1,8 @@
 package ch.asds.mobile
 
 import android.content.Context
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
 import org.json.JSONArray
 import org.json.JSONObject
 import java.math.BigDecimal
@@ -17,7 +19,11 @@ import java.util.UUID
  */
 class R1Store(context: Context) {
     private val secure = SecureStore(context.applicationContext)
+    private val dao = R1RoomDatabase.open(context.applicationContext).documents()
     companion object {
+        // WorkManager and UI each instantiate a separate R1Store; serialize all
+        // read-modify-write cycles across these instances.
+        private val GLOBAL_LOCK = Any()
         private const val QUEUE = "r1_queue_v1"
         private const val DRAFT = "r1_time_draft_v1"
         private const val TEMPLATES = "r1_time_templates_v1"
@@ -26,15 +32,16 @@ class R1Store(context: Context) {
     }
 
     @Synchronized fun draft(): JSONObject = objectValue(DRAFT)
-    @Synchronized fun saveDraft(value: JSONObject) = secure.put(DRAFT, value.toString())
-    @Synchronized fun clearDraft() = secure.remove(DRAFT)
+    @Synchronized fun saveDraft(value: JSONObject) = persistDocument(DRAFT, value.toString())
+    @Synchronized fun clearDraft() = deleteDocument(DRAFT)
     @Synchronized fun templates(): JSONArray = arrayValue(TEMPLATES)
     @Synchronized fun customers(): JSONArray = arrayValue(CUSTOMERS)
     @Synchronized fun appointments(): JSONArray = arrayValue(APPOINTMENTS)
-    @Synchronized fun cacheCustomers(value: JSONArray) = secure.put(CUSTOMERS, value.toString())
-    @Synchronized fun cacheAppointments(value: JSONArray) = secure.put(APPOINTMENTS, value.toString())
+    @Synchronized fun cacheCustomers(value: JSONArray) = persistDocument(CUSTOMERS, value.toString())
+    @Synchronized fun cacheAppointments(value: JSONArray) = persistDocument(APPOINTMENTS, value.toString())
 
     @Synchronized fun saveTemplate(label: String, value: JSONObject) {
+        synchronized(GLOBAL_LOCK) {
         require(label.isNotBlank() && label.length <= 80)
         val items = arrayValue(TEMPLATES)
         val out = JSONArray()
@@ -43,10 +50,12 @@ class R1Store(context: Context) {
             if (row.optString("label") != label) out.put(row)
         }
         out.put(JSONObject().put("label", label).put("fields", JSONObject(value.toString())))
-        secure.put(TEMPLATES, out.toString())
+        persistDocument(TEMPLATES, out.toString())
+        }
     }
 
     @Synchronized fun enqueueTime(payload: JSONObject, objectId: Int? = null, baseRevision: Int? = null): String {
+        synchronized(GLOBAL_LOCK) {
         val sourceKey = UUID.randomUUID().toString()
         val body = JSONObject(payload.toString())
         val hash = MessageDigest.getInstance("SHA-256")
@@ -67,8 +76,9 @@ class R1Store(context: Context) {
             .put("next_retry_at", 0L).put("last_error", "")
             .put("created_at", System.currentTimeMillis())
         val rows = queue().apply { put(row) }
-        secure.put(QUEUE, rows.toString())
+        persistDocument(QUEUE, rows.toString())
         return sourceKey
+        }
     }
 
     @Synchronized fun queue(): JSONArray = arrayValue(QUEUE)
@@ -91,6 +101,7 @@ class R1Store(context: Context) {
                                    retryable: Boolean = false, serverId: Int = 0,
                                    revision: Int = 0, retryAfterSeconds: Long = 0L) {
         require(status in listOf("pending", "processing", "success", "failed", "conflict"))
+        synchronized(GLOBAL_LOCK) {
         val rows = queue()
         for (i in 0 until rows.length()) {
             val row = rows.optJSONObject(i) ?: continue
@@ -105,15 +116,41 @@ class R1Store(context: Context) {
                 val backoff = (30L * (1L shl attempts.coerceAtMost(6))).coerceAtMost(3600L)
                 row.put("next_retry_at", System.currentTimeMillis() + maxOf(backoff, retryAfterSeconds) * 1000L)
             }
-            secure.put(QUEUE, rows.toString())
+            persistDocument(QUEUE, rows.toString())
             return
+        }
         }
     }
 
-    private fun objectValue(key: String): JSONObject =
-        try { JSONObject(secure.get(key, "{}")) } catch (_: Exception) { JSONObject() }
-    private fun arrayValue(key: String): JSONArray =
-        try { JSONArray(secure.get(key, "[]")) } catch (_: Exception) { JSONArray() }
+    private fun objectValue(key: String): JSONObject = JSONObject(loadDocument(key, "{}"))
+    private fun arrayValue(key: String): JSONArray = JSONArray(loadDocument(key, "[]"))
+
+    /** First access migrates encrypted 2.0.1 R1 preference data into Room.
+     * Original ciphertext remains as a rollback-compatible mirror.
+     * Any Room/Keystore error propagates: NEVER silently discard a queue.
+     */
+    private fun loadDocument(key: String, fallback: String): String = synchronized(GLOBAL_LOCK) {
+        val saved = runBlocking(Dispatchers.IO) { dao.find(key) }
+        if (saved != null) return@synchronized secure.decryptFromRoom(saved.encryptedJson)
+        val previous = secure.get(key, fallback)
+        if (previous != fallback) persistDocument(key, previous)
+        previous
+    }
+
+    private fun persistDocument(key: String, json: String) = synchronized(GLOBAL_LOCK) {
+        val encrypted = secure.encryptForRoom(json)
+        // SQLite transaction first: authoritative and crash-safe.
+        runBlocking(Dispatchers.IO) {
+            dao.put(R1SecureDocument(key, encrypted, System.currentTimeMillis()))
+        }
+        // Legacy encrypted preference is intentionally kept for rollback.
+        secure.put(key, json)
+    }
+
+    private fun deleteDocument(key: String) = synchronized(GLOBAL_LOCK) {
+        runBlocking(Dispatchers.IO) { dao.delete(key) }
+        secure.remove(key)
+    }
 }
 
 object R1Amounts {

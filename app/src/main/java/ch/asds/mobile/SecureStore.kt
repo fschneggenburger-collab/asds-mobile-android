@@ -40,6 +40,12 @@ class SecureStore(context: Context) {
         preferences.edit().clear().apply()
     }
 
+    /** Reuse the existing Keystore AES-GCM key; NO key is exported or regenerated
+     * when one already exists. Room stores only the ciphertext.
+     */
+    @Synchronized fun encryptForRoom(json: String): String = encrypt(json)
+    @Synchronized fun decryptFromRoom(ciphertext: String): String = decrypt(ciphertext)
+
     private fun secretKey(): SecretKey {
         val keyStore = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
         val existing = keyStore.getKey(alias, null) as? SecretKey
