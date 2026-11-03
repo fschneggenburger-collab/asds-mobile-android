@@ -254,7 +254,9 @@ class MainActivity : AppCompatActivity() {
             getString(R.string.quick_customer),
             getString(R.string.quick_security),
             getString(R.string.quick_leadership),
-            getString(R.string.quick_r1_time)
+            getString(R.string.quick_r1_time),
+            "Fahrten-Cockpit",
+            "Fahrten zusammenfassen"
         )
         AlertDialog.Builder(this)
             .setTitle(R.string.quick_title)
@@ -270,6 +272,8 @@ class MainActivity : AppCompatActivity() {
                     7 -> showNativeSecurityMenu()
                     8 -> showNativeLeadershipMenu()
                     9 -> startActivity(Intent(this, R1CaptureActivity::class.java))
+                    10 -> navigateTo("trips.php")
+                    11 -> webView.loadUrl("${BASE_URL}trips.php?stage=10#asdsfc-merge")
                 }
             }
             .setNegativeButton(R.string.cancel, null)
